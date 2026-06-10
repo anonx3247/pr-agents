@@ -38,6 +38,7 @@ var commands = map[string]command{
 	"set-pr-number": {"Record the PR number on the current worker's entry", runSetPrNumber},
 	"mark-pushed":   {"Mark the current worker's PR as pushed (starts polling)", runMarkPushed},
 	"report-result": {"Record the current worker's final result text", runReportResult},
+	"reply-review":  {"Reply to a reviewer's inline comment thread", runReplyReview},
 	"select":        {"Interactively select a PR agent", stub("select")},
 	"daemon":        {"Run the per-session background daemon", runDaemon},
 }

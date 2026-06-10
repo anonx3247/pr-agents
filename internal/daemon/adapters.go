@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -217,6 +218,37 @@ func (realGH) OwnerRepo(cwd string) (string, string, bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
+}
+
+// ResolveOwnerRepo resolves owner/name for the current repo in cwd via gh, or
+// ok=false when gh is unavailable. Exported so worker-side verbs (reply-review)
+// can reuse the same resolution the daemon uses.
+func ResolveOwnerRepo(cwd string) (owner, repo string, ok bool) {
+	return realGH{}.OwnerRepo(cwd)
+}
+
+// PostReviewReply posts an inline reply to a review comment thread via gh,
+// passing the body over stdin so it is always treated as a literal string (no
+// shell/quoting issues). Returns the created reply's numeric id and ok=true, or
+// ok=false on any failure. A reply does NOT resolve the thread.
+func PostReviewReply(owner, repo string, prNumber, commentID int, body, cwd string) (int, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+	defer cancel()
+	endpoint := fmt.Sprintf("repos/%s/%s/pulls/%d/comments/%d/replies", owner, repo, prNumber, commentID)
+	cmd := exec.CommandContext(ctx, "gh", "api", "-X", "POST", endpoint, "-F", "body=@-")
+	cmd.Dir = cwd
+	cmd.Stdin = strings.NewReader(body)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, false
+	}
+	var j struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal(out, &j); err != nil || j.ID == 0 {
+		return 0, false
+	}
+	return j.ID, true
 }
 
 // realTmux implements Tmuxer over the tmux package.

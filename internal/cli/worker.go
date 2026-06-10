@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anonx3247/pr-agents/internal/core"
+	"github.com/anonx3247/pr-agents/internal/daemon"
 	"github.com/anonx3247/pr-agents/internal/tmux"
 )
 
@@ -117,6 +118,46 @@ func runMarkPushed(args []string, stdout, stderr io.Writer) int {
 	}
 	relabelPane(updated)
 	fmt.Fprintln(stdout, "Marked as pushed; the orchestrator will now poll this PR.")
+	return 0
+}
+
+// runReplyReview posts an inline reply to a reviewer's comment thread on the
+// current worker's PR and records the reply id in the seen-set so the daemon
+// never re-surfaces it. It does NOT resolve the thread (left to the reviewer).
+func runReplyReview(args []string, stdout, stderr io.Writer) int {
+	if len(args) < 2 {
+		fmt.Fprintln(stderr, "pr-agents reply-review: usage: reply-review <commentId> <body...>")
+		return 2
+	}
+	commentID, err := strconv.Atoi(args[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents reply-review: invalid commentId %q\n", args[0])
+		return 2
+	}
+	body := strings.Join(args[1:], " ")
+	cwd, e, ok := workerEntry(stderr, "reply-review")
+	if !ok {
+		return 1
+	}
+	if e.PrNumber == nil {
+		fmt.Fprintln(stderr, "pr-agents reply-review: this PR has no number yet (run set-pr-number first)")
+		return 1
+	}
+	owner, repo, ok := daemon.ResolveOwnerRepo(cwd)
+	if !ok {
+		fmt.Fprintln(stderr, "pr-agents reply-review: could not resolve owner/repo (is gh authenticated?)")
+		return 1
+	}
+	replyID, ok := daemon.PostReviewReply(owner, repo, *e.PrNumber, commentID, body, cwd)
+	if !ok {
+		fmt.Fprintln(stderr, "pr-agents reply-review: failed to post reply via gh")
+		return 1
+	}
+	// Record the reply so the poller's seen-set never re-surfaces our own reply.
+	_, _, _ = core.UpdateEntry(cwd, e.ID, func(p *core.PrEntry) {
+		p.SeenReviewIds = core.MergeSeen(p.SeenReviewIds, []string{fmt.Sprintf("rc:%d", replyID)})
+	})
+	fmt.Fprintf(stdout, "Replied to comment %d (reply id %d).\n", commentID, replyID)
 	return 0
 }
 
