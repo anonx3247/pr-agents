@@ -1,0 +1,223 @@
+package daemon
+
+import (
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/anonx3247/pr-agents/internal/core"
+)
+
+func intp(n int) *int { return &n }
+
+// --- fakes ---------------------------------------------------------------
+
+type fakeGH struct {
+	state map[int]*core.PrStateJSON
+	ci    map[int]struct {
+		sha    string
+		checks []core.CiCheck
+	}
+	review map[int]core.FetchedReviewActivity
+	owner  string
+	repo   string
+	hasOwn bool
+}
+
+func (f *fakeGH) PrState(_ string, n int) (*core.PrStateJSON, bool) {
+	j, ok := f.state[n]
+	return j, ok
+}
+func (f *fakeGH) CiChecks(_ string, n int) (string, []core.CiCheck, bool) {
+	c, ok := f.ci[n]
+	if !ok {
+		return "", nil, false
+	}
+	return c.sha, c.checks, true
+}
+func (f *fakeGH) ReviewActivity(_, _ string, n int, _ string) (core.FetchedReviewActivity, bool) {
+	r, ok := f.review[n]
+	return r, ok
+}
+func (f *fakeGH) OwnerRepo(_ string) (string, string, bool) {
+	return f.owner, f.repo, f.hasOwn
+}
+
+type sent struct {
+	pane string
+	msg  string
+}
+
+type fakeTmux struct {
+	mu      sync.Mutex
+	alive   map[string]bool
+	sends   []sent
+	joins   [][2]string
+	breaks  [][2]string
+	layouts []string
+}
+
+func (f *fakeTmux) SendToPane(pane, msg string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sends = append(f.sends, sent{pane, msg})
+	return true
+}
+func (f *fakeTmux) PaneAlive(pane string) bool { return f.alive[pane] }
+func (f *fakeTmux) JoinPane(src, target string) bool {
+	f.joins = append(f.joins, [2]string{src, target})
+	return true
+}
+func (f *fakeTmux) BreakPane(src, name string) bool {
+	f.breaks = append(f.breaks, [2]string{src, name})
+	return true
+}
+func (f *fakeTmux) SelectLayoutMainVertical(target string) { f.layouts = append(f.layouts, target) }
+func (f *fakeTmux) SetMainPaneWidth(_, _ string)           {}
+
+func (f *fakeTmux) messagesTo(pane string) []string {
+	out := []string{}
+	for _, s := range f.sends {
+		if s.pane == pane {
+			out = append(out, s.msg)
+		}
+	}
+	return out
+}
+
+type fakeStore struct {
+	entries []core.PrEntry
+}
+
+func (s *fakeStore) Load() []core.PrEntry { return s.entries }
+func (s *fakeStore) Update(id string, patch func(*core.PrEntry)) {
+	for i := range s.entries {
+		if s.entries[i].ID == id {
+			patch(&s.entries[i])
+			return
+		}
+	}
+}
+
+// worker is a convenience builder for a pollable depth-1 entry.
+func worker(id string, num int) core.PrEntry {
+	return core.PrEntry{
+		ID: id, SessionID: "s", Depth: 1, Pushed: true, PrNumber: intp(num),
+		Status: core.StatusOpen, PaneID: "%" + id, Worktree: "/wt/" + id,
+	}
+}
+
+func newDaemon(cfg Config, gh GH, tm Tmuxer, st Store) *Daemon {
+	cfg.Session = "s"
+	d := New(cfg, gh, tm, st, "/repo")
+	return d
+}
+
+// --- tests ---------------------------------------------------------------
+
+func TestPollPrStateNotifiesOnTerminalTransition(t *testing.T) {
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1), worker("b", 2)}}
+	gh := &fakeGH{state: map[int]*core.PrStateJSON{
+		1: {State: "MERGED"},
+		2: {State: "OPEN"},
+	}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, gh, tm, st)
+
+	d.pollPrState()
+
+	msgs := tm.messagesTo("orch")
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "PR #1") {
+		t.Fatalf("want one cleanup notice for PR #1, got %#v", msgs)
+	}
+	// Status persisted.
+	if st.entries[0].Status != core.StatusMerged {
+		t.Errorf("entry a status = %q, want merged", st.entries[0].Status)
+	}
+
+	// Second poll: no new transition => no new message.
+	tm.sends = nil
+	d.pollPrState()
+	if got := tm.messagesTo("orch"); len(got) != 0 {
+		t.Errorf("expected no repeat notification, got %#v", got)
+	}
+}
+
+func TestPollPrStateSkipsUnpushed(t *testing.T) {
+	e := worker("a", 1)
+	e.Pushed = false
+	st := &fakeStore{entries: []core.PrEntry{e}}
+	gh := &fakeGH{state: map[int]*core.PrStateJSON{1: {State: "MERGED"}}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, gh, tm, st)
+	d.pollPrState()
+	if len(tm.sends) != 0 {
+		t.Errorf("unpushed entry should not be polled, got %#v", tm.sends)
+	}
+}
+
+func TestPollFinishedNotifiesOnce(t *testing.T) {
+	e := worker("a", 1)
+	e.ResultSeq = intp(0)
+	e.LastResult = "all done"
+	st := &fakeStore{entries: []core.PrEntry{e}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, &fakeGH{}, tm, st)
+
+	d.pollFinished()
+	msgs := tm.messagesTo("orch")
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "all done") {
+		t.Fatalf("want one finished notice, got %#v", msgs)
+	}
+	tm.sends = nil
+	d.pollFinished()
+	if len(tm.sends) != 0 {
+		t.Errorf("finished should notify once, got %#v", tm.sends)
+	}
+}
+
+func TestPollWorkersReviewAndCi(t *testing.T) {
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1)}}
+	gh := &fakeGH{
+		owner: "o", repo: "r", hasOwn: true,
+		review: map[int]core.FetchedReviewActivity{
+			1: {Inline: []core.InlineComment{{ID: 10, Path: "x.go", Body: "fix"}}},
+		},
+		ci: map[int]struct {
+			sha    string
+			checks []core.CiCheck
+		}{
+			1: {sha: "sha1", checks: []core.CiCheck{{Name: "build", Bucket: "fail", State: "failure"}}},
+		},
+	}
+	tm := &fakeTmux{alive: map[string]bool{"%a": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, gh, tm, st)
+
+	d.pollWorkers()
+	msgs := tm.messagesTo("%a")
+	if len(msgs) != 2 {
+		t.Fatalf("want a review task + a CI task, got %d: %#v", len(msgs), msgs)
+	}
+	joined := strings.Join(msgs, "\n")
+	if !strings.Contains(joined, "[rc:10]") || !strings.Contains(joined, "build (failure)") {
+		t.Errorf("missing review/ci content: %#v", msgs)
+	}
+	// Seen-set persisted: a second poll re-surfaces nothing.
+	tm.sends = nil
+	d.pollWorkers()
+	if got := tm.messagesTo("%a"); len(got) != 0 {
+		t.Errorf("expected dedup, got %#v", got)
+	}
+}
+
+func TestPollWorkersSkipsDeadPane(t *testing.T) {
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1)}}
+	gh := &fakeGH{owner: "o", repo: "r", hasOwn: true,
+		review: map[int]core.FetchedReviewActivity{1: {Inline: []core.InlineComment{{ID: 1, Body: "x"}}}}}
+	tm := &fakeTmux{alive: map[string]bool{}} // %a not alive
+	d := newDaemon(Config{OrchestratorPane: "orch"}, gh, tm, st)
+	d.pollWorkers()
+	if len(tm.sends) != 0 {
+		t.Errorf("dead worker pane should be skipped, got %#v", tm.sends)
+	}
+}

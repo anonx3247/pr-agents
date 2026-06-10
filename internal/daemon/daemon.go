@@ -1,0 +1,188 @@
+// Package daemon implements the per-session background daemon that replaces
+// pi's in-process timers with a harness-agnostic, long-lived loop. It polls
+// GitHub PR state, CI checks, and review activity, and drives ALL cross-agent
+// messaging through `tmux send-keys` (no harness-specific message APIs). One
+// daemon runs per orchestrator session, started best-effort by `pr-agents
+// start`.
+//
+// All gh/git/tmux access is behind small interfaces (GH, Tmuxer, Store) so the
+// tick decision logic is unit-tested with fakes. Every tick is wrapped so a
+// gh/git/tmux failure never kills the loop.
+package daemon
+
+import (
+	"io"
+	"time"
+
+	"github.com/anonx3247/pr-agents/internal/core"
+)
+
+// Default poll intervals. gh state polls are network-bound so they run slower;
+// review/CI polls run on their own slightly slower cadence.
+const (
+	DefaultGhInterval     = 15 * time.Second
+	DefaultReviewInterval = 30 * time.Second
+	// dockInterval drives the cheap, tmux-only dock maintenance / finished-result
+	// poll; it is fast because it makes no network calls.
+	dockInterval = 2 * time.Second
+)
+
+// Config holds the daemon's runtime configuration, supplied by the CLI verb.
+type Config struct {
+	Session          string
+	OrchestratorPane string
+	Harness          string
+	Launcher         string
+	GhInterval       time.Duration
+	ReviewInterval   time.Duration
+	NoDock           bool
+}
+
+// GH abstracts the gh/git reads the daemon performs, so the tick logic can be
+// driven by fakes in tests. Every method degrades to ok=false on any failure.
+type GH interface {
+	// PrState reads `gh pr view <n> --json state,mergedAt,closedAt,url` in
+	// worktree and returns the parsed JSON subset.
+	PrState(worktree string, number int) (*core.PrStateJSON, bool)
+	// CiChecks reads the PR head sha and CI check states in cwd.
+	CiChecks(cwd string, number int) (headSha string, checks []core.CiCheck, ok bool)
+	// ReviewActivity reads inline comments + reviews + issue comments for a PR.
+	ReviewActivity(owner, repo string, number int, cwd string) (core.FetchedReviewActivity, bool)
+	// OwnerRepo resolves the current repo's owner/name in cwd.
+	OwnerRepo(cwd string) (owner, repo string, ok bool)
+}
+
+// Tmuxer abstracts the tmux operations the daemon performs (messaging + dock
+// primitives), so the dock/notification logic is testable with a fake.
+type Tmuxer interface {
+	SendToPane(paneID, message string) bool
+	PaneAlive(paneID string) bool
+	JoinPane(srcPane, targetPane string) bool
+	BreakPane(srcPane, windowName string) bool
+	SelectLayoutMainVertical(targetPane string)
+	SetMainPaneWidth(targetPane, width string)
+}
+
+// Store abstracts the registry reads/writes the daemon performs, so the tick
+// logic is testable without a real git repo.
+type Store interface {
+	Load() []core.PrEntry
+	Update(id string, patch func(*core.PrEntry))
+}
+
+// Daemon is the per-session poller. It holds the injected IO interfaces plus the
+// in-memory dedup state seeded from the registry on the first tick.
+type Daemon struct {
+	cfg   Config
+	gh    GH
+	tm    Tmuxer
+	store Store
+	cwd   string
+
+	// In-memory dedup state across ticks.
+	lastState      map[string]core.PrStateClass
+	lastSeenResult map[string]int
+	ownerRepo      *ownerRepo
+	dockedPane     string
+}
+
+type ownerRepo struct {
+	owner string
+	repo  string
+}
+
+// New constructs a Daemon with the given config, IO interfaces, and cwd.
+func New(cfg Config, gh GH, tm Tmuxer, store Store, cwd string) *Daemon {
+	if cfg.GhInterval <= 0 {
+		cfg.GhInterval = DefaultGhInterval
+	}
+	if cfg.ReviewInterval <= 0 {
+		cfg.ReviewInterval = DefaultReviewInterval
+	}
+	return &Daemon{
+		cfg:            cfg,
+		gh:             gh,
+		tm:             tm,
+		store:          store,
+		cwd:            cwd,
+		lastState:      map[string]core.PrStateClass{},
+		lastSeenResult: map[string]int{},
+	}
+}
+
+// entries returns this session's registry entries.
+func (d *Daemon) entries() []core.PrEntry {
+	return core.EntriesForSession(d.store.Load(), d.cfg.Session)
+}
+
+// seed primes the dedup maps from the current registry so existing results and
+// PR states don't replay as notifications the moment the daemon starts. Pollable
+// entries start as "open" and are re-classified on the first tick, so a PR that
+// merged while the daemon was down still surfaces as a fresh transition.
+func (d *Daemon) seed() {
+	for _, e := range d.entries() {
+		if core.IsPollable(e) {
+			d.lastState[e.ID] = core.PrStateOpen
+		}
+		if e.Depth == 1 && e.ResultSeq != nil {
+			d.lastSeenResult[e.ID] = *e.ResultSeq
+		}
+	}
+}
+
+// safe runs fn, swallowing any panic so one bad tick never kills the loop.
+func safe(fn func()) {
+	defer func() { _ = recover() }()
+	fn()
+}
+
+// Run starts the daemon loop until ctx-equivalent stop channel is closed. It is
+// resilient: every tick is wrapped so a gh/git/tmux failure never kills the
+// loop. The loop drives three cadences: a fast tmux-only tick (dock + finished),
+// a gh-state tick, and a review/CI tick.
+func (d *Daemon) Run(stop <-chan struct{}, logw io.Writer) {
+	d.seed()
+
+	// Fire each cadence once up front so a freshly-started daemon reacts without
+	// waiting a full interval.
+	safe(d.tickFast)
+	safe(d.tickGhState)
+	safe(d.tickReviewsAndCi)
+
+	fast := time.NewTicker(dockInterval)
+	gh := time.NewTicker(d.cfg.GhInterval)
+	review := time.NewTicker(d.cfg.ReviewInterval)
+	defer fast.Stop()
+	defer gh.Stop()
+	defer review.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-fast.C:
+			safe(d.tickFast)
+		case <-gh.C:
+			safe(d.tickGhState)
+		case <-review.C:
+			safe(d.tickReviewsAndCi)
+		}
+	}
+}
+
+// tickFast runs the cheap, tmux-only maintenance: dock auto-flip and the
+// registry-driven worker-finished notification.
+func (d *Daemon) tickFast() {
+	d.maintainDock()
+	d.pollFinished()
+}
+
+// tickGhState runs the GitHub PR-state poll → orchestrator cleanup notification.
+func (d *Daemon) tickGhState() {
+	d.pollPrState()
+}
+
+// tickReviewsAndCi runs the per-worker review-comment and CI-failure polls.
+func (d *Daemon) tickReviewsAndCi() {
+	d.pollWorkers()
+}
