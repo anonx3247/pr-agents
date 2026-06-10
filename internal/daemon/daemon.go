@@ -146,8 +146,8 @@ func (d *Daemon) Run(stop <-chan struct{}, logw io.Writer) {
 	// Fire each cadence once up front so a freshly-started daemon reacts without
 	// waiting a full interval.
 	safe(d.tickFast)
-	safe(d.tickGhState)
-	safe(d.tickReviewsAndCi)
+	safe(d.pollPrState)
+	safe(d.pollWorkers)
 
 	fast := time.NewTicker(dockInterval)
 	gh := time.NewTicker(d.cfg.GhInterval)
@@ -163,9 +163,9 @@ func (d *Daemon) Run(stop <-chan struct{}, logw io.Writer) {
 		case <-fast.C:
 			safe(d.tickFast)
 		case <-gh.C:
-			safe(d.tickGhState)
+			safe(d.pollPrState)
 		case <-review.C:
-			safe(d.tickReviewsAndCi)
+			safe(d.pollWorkers)
 		}
 	}
 }
@@ -175,14 +175,4 @@ func (d *Daemon) Run(stop <-chan struct{}, logw io.Writer) {
 func (d *Daemon) tickFast() {
 	d.maintainDock()
 	d.pollFinished()
-}
-
-// tickGhState runs the GitHub PR-state poll → orchestrator cleanup notification.
-func (d *Daemon) tickGhState() {
-	d.pollPrState()
-}
-
-// tickReviewsAndCi runs the per-worker review-comment and CI-failure polls.
-func (d *Daemon) tickReviewsAndCi() {
-	d.pollWorkers()
 }

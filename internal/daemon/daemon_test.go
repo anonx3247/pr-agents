@@ -12,12 +12,14 @@ func intp(n int) *int { return &n }
 
 // --- fakes ---------------------------------------------------------------
 
+type fakeCi struct {
+	sha    string
+	checks []core.CiCheck
+}
+
 type fakeGH struct {
-	state map[int]*core.PrStateJSON
-	ci    map[int]struct {
-		sha    string
-		checks []core.CiCheck
-	}
+	state  map[int]*core.PrStateJSON
+	ci     map[int]fakeCi
 	review map[int]core.FetchedReviewActivity
 	owner  string
 	repo   string
@@ -183,10 +185,7 @@ func TestPollWorkersReviewAndCi(t *testing.T) {
 		review: map[int]core.FetchedReviewActivity{
 			1: {Inline: []core.InlineComment{{ID: 10, Path: "x.go", Body: "fix"}}},
 		},
-		ci: map[int]struct {
-			sha    string
-			checks []core.CiCheck
-		}{
+		ci: map[int]fakeCi{
 			1: {sha: "sha1", checks: []core.CiCheck{{Name: "build", Bucket: "fail", State: "failure"}}},
 		},
 	}
