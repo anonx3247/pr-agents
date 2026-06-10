@@ -127,14 +127,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: pr-agents [--version] <command> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
-	names := make([]string, 0, len(commands))
-	for name := range commands {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		fmt.Fprintf(w, "  %-10s %s\n", name, commands[name].summary)
-	}
+	printCommands(w, commands)
 }
 
 func toolUsage(w io.Writer) {
@@ -143,12 +136,22 @@ func toolUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: pr-agents tool <subcommand> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcommands:")
-	names := make([]string, 0, len(toolCommands))
-	for name := range toolCommands {
+	printCommands(w, toolCommands)
+}
+
+// printCommands writes the names and summaries of a dispatch table, sorted by
+// name and padded to the widest name.
+func printCommands(w io.Writer, cmds map[string]command) {
+	names := make([]string, 0, len(cmds))
+	width := 0
+	for name := range cmds {
 		names = append(names, name)
+		if len(name) > width {
+			width = len(name)
+		}
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		fmt.Fprintf(w, "  %-14s %s\n", name, toolCommands[name].summary)
+		fmt.Fprintf(w, "  %-*s %s\n", width, name, cmds[name].summary)
 	}
 }
