@@ -129,17 +129,6 @@ func RemoveWorktree(cwd, path string) error {
 	return err
 }
 
-// GtTrack tells Graphite to track the current branch with the given parent,
-// run inside the worktree: `gt track --parent <parent>`. Best-effort: a missing
-// gt or a failure is returned so the caller can warn but continue.
-func GtTrack(worktreeDir, parent string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "gt", "track", "--parent", parent)
-	cmd.Dir = worktreeDir
-	return cmd.Run()
-}
-
 // DeleteBranch force-deletes a local branch. Best-effort.
 func DeleteBranch(cwd, branch string) error {
 	_, err := git(cwd, "branch", "-D", branch)

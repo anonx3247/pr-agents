@@ -41,8 +41,15 @@ When the work is ready, push your branch and open the pull request:
 
 - **independent / stack mode:** `gh pr create --base {{.Base}}` (for `stack`,
   the base is the branch you stacked on).
-- **graphite mode:** `gt submit --stack --no-interactive`. If `gt` auth fails,
-  fall back to `gh pr create --base {{.Base}}`.
+- **graphite mode:** your branch already exists in its own worktree, so register
+  it in the stack and submit:
+
+  ```
+  gt track --parent {{.Base}} {{.Branch}}   # if not already tracked
+  gt submit --stack --no-interactive
+  ```
+
+  If `gt` auth fails, fall back to `gh pr create --base {{.Base}}`.
 
 Then record the result in the registry:
 

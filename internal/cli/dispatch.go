@@ -253,18 +253,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if plan.mode == core.ModeGraphite {
-		// Best-effort: register the branch in the Graphite stack. A missing gt
-		// is non-fatal — the worker falls back to gh.
-		if err := core.GtTrack(worktree, plan.base); err != nil {
-			fmt.Fprintf(stderr, "pr-agents dispatch: warning: gt track failed (%v); worker will fall back to gh\n", err)
-		}
-	}
+	// Graphite stacks are derived from each entry's base→parent branch link and
+	// driven by the WORKER (`gt track --parent <base> <branch>` then
+	// `gt submit`), matching the gt-graphite/pr-worker model — dispatch does not
+	// gt-track. The base branch is recorded on the entry below.
 
 	// Render the worker instructions and decide flag vs file injection.
 	instructions, err := harness.Instructions(harness.RoleWorker, harness.InstructionData{
-		Base: plan.base,
-		Mode: string(plan.mode),
+		Base:   plan.base,
+		Branch: plan.branch,
+		Mode:   string(plan.mode),
 	})
 	if err != nil {
 		core.RemoveWorktree(root, worktree)

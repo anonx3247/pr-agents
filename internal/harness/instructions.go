@@ -18,6 +18,8 @@ var instructionFS embed.FS
 type InstructionData struct {
 	// Base is the PR's base branch.
 	Base string
+	// Branch is the PR's working branch (used by the graphite `gt track` step).
+	Branch string
 	// Mode is the stacking mode: independent | stack | graphite | helper.
 	Mode string
 }

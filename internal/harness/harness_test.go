@@ -76,12 +76,12 @@ func TestInstructions(t *testing.T) {
 		contains []string
 	}{
 		{RoleOrchestrator, []string{"PR-orchestrator", "pr-agents dispatch", "pr-agents cleanup"}},
-		{RoleWorker, []string{"pr-agents context", "set-pr-number", "mark-pushed", "feature-base", "graphite"}},
+		{RoleWorker, []string{"pr-agents context", "set-pr-number", "mark-pushed", "feature-base", "graphite", "gt track --parent feature-base feature-branch"}},
 		{RoleHelper, []string{"helper subagent", "cannot"}},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.role), func(t *testing.T) {
-			out, err := Instructions(tt.role, InstructionData{Base: "feature-base", Mode: "graphite"})
+			out, err := Instructions(tt.role, InstructionData{Base: "feature-base", Branch: "feature-branch", Mode: "graphite"})
 			if err != nil {
 				t.Fatalf("Instructions(%s) error: %v", tt.role, err)
 			}
