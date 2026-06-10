@@ -11,6 +11,18 @@ package harness
 //   - --permission-mode acceptEdits lets it apply edits autonomously in the
 //     worktree without per-action approval (a valid choice alongside "default",
 //     "auto", "bypassPermissions").
+//
+// Sandboxing is intentionally NOT this adapter's concern. pr-agents never calls
+// a sandbox tool; isolation is layered on by the operator overriding the
+// configurable launcher PREFIX (e.g. "isara claude run" / "asb -- claude").
+// Crucially, every subagent is its OWN separate launch through that same prefix
+// (the orchestrator dispatches each worker via `pr-agents dispatch`, which
+// re-applies the prefix per pane) — so a sandbox is re-imposed on each subagent
+// rather than inherited from the parent process. We therefore use the scoped
+// --permission-mode acceptEdits (edit-approval inside the already-isolated
+// worktree) and deliberately NOT --dangerously-skip-permissions: the launcher
+// prefix is the real trust boundary, and acceptEdits does not need to propagate
+// to subagents because each pane is launched fresh with its own flags here.
 type claudeAdapter struct{}
 
 func init() { register(claudeAdapter{}) }
