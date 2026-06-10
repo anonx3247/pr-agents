@@ -64,6 +64,36 @@ func isSubpath(child, parent string) bool {
 	return strings.HasPrefix(child, prefix)
 }
 
+// ScopeRefResolver resolves the orchestrator's OWN resumable session reference
+// for the main repo cwd, returning ok=false when none can be located. It is
+// injected so ResolveScopeID stays pure and unit-testable without scanning the
+// real "~" session stores.
+type ScopeRefResolver func() (ref string, ok bool)
+
+// ResolveScopeID derives the STABLE scope id that owns the orchestrator's
+// registry entries (a port of pi's resolveOrchestratorSessionId, made
+// harness-agnostic). Resolution order:
+//
+//  1. the orchestrator's real harness session ref (resolveRef): because the
+//     harness reopens the SAME session on resume, this yields the same ref and
+//     thus the same scope, so the orchestrator re-scopes to its existing
+//     entries; a genuinely fresh session yields a new ref and a new scope.
+//  2. the PRA_SESSION env var (carried across a tmux re-exec / nested process).
+//  3. a random fallback for a first-ever start with no session on disk yet.
+func ResolveScopeID(resolveRef ScopeRefResolver, env string, fallback func() string) string {
+	if resolveRef != nil {
+		if ref, ok := resolveRef(); ok {
+			if r := strings.TrimSpace(ref); r != "" {
+				return r
+			}
+		}
+	}
+	if e := strings.TrimSpace(env); e != "" {
+		return e
+	}
+	return fallback()
+}
+
 // PickRedockAgent chooses which agent to (re)dock: the most-recently-created
 // LIVE depth-1 PR agent. Liveness is supplied via the isAlive predicate so the
 // logic stays pure and unit-testable. Returns nil when there are no live agents.
