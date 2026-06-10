@@ -169,6 +169,15 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	// (e.g. not inside tmux) must never block the orchestrator.
 	startDaemon(session, harnessKind, orchestratorPane())
 
+	// Auto-revive on a resume-start: when this scope already owns registry
+	// entries, re-dock a live agent and relaunch any dead PR panes BEFORE handing
+	// off to the harness. Guarded; a fresh scope (no entries) is a no-op.
+	if all, err := core.LoadRegistry(cwd); err == nil {
+		if len(core.EntriesForSession(all, session)) > 0 {
+			reviveScope(all, cwd, session, harnessKind, launcher, orchestratorPane())
+		}
+	}
+
 	argv := buildOrchestratorArgv(launcher, adapter.BuildArgs(spec, instructionsPath), extra)
 	if len(argv) == 0 {
 		fmt.Fprintln(stderr, "pr-agents start: empty launch command")

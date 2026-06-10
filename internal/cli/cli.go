@@ -30,6 +30,7 @@ var commands = map[string]command{
 	"version":  {"Print the pr-agents version", runVersion},
 	"start":    {"Launch the orchestrator in a tmux session", runStart},
 	"dispatch": {"Create a worktree + branch + pane and hand off one PR", runDispatch},
+	"resume":   {"Re-dock + revive this scope's dead PR agents on resume", runResume},
 	"list":     {"List PR agents with number/name/branch/status", runList},
 	"peek":     {"Read a PR agent's recent pane output", runPeek},
 	"send":     {"Send a message to a running PR agent", runSend},
