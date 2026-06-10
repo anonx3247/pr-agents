@@ -160,3 +160,17 @@ func TestDefaultBranch(t *testing.T) {
 		t.Errorf("DefaultBranch = %q, want main", got)
 	}
 }
+
+func TestParseWorktreePaths(t *testing.T) {
+	porcelain := "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo/.worktrees/pr-1\nHEAD def\nbranch refs/heads/feat\n\nworktree /repo/.worktrees/pr-2\nHEAD 012\ndetached\n"
+	got := ParseWorktreePaths(porcelain)
+	want := []string{"/repo", "/repo/.worktrees/pr-1", "/repo/.worktrees/pr-2"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("path[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

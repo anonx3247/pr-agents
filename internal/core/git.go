@@ -94,6 +94,61 @@ func GitBranchExists(cwd string) BranchExists {
 	}
 }
 
+// BranchMerged reports whether branch is fully merged into base, via
+// `git branch --merged base`. Best-effort: any git error yields false.
+func BranchMerged(cwd, branch, base string) bool {
+	out, ok := tryGit(cwd, "branch", "--merged", base, "--format=%(refname:short)")
+	if !ok {
+		return false
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == branch {
+			return true
+		}
+	}
+	return false
+}
+
+// WorktreeListPorcelain returns `git worktree list --porcelain` output, or ""
+// on error.
+func WorktreeListPorcelain(cwd string) string {
+	out, _ := tryGit(cwd, "worktree", "list", "--porcelain")
+	return out
+}
+
+// RemoveWorktree force-removes the worktree at path. Best-effort.
+func RemoveWorktree(cwd, path string) error {
+	_, err := git(cwd, "worktree", "remove", "--force", path)
+	return err
+}
+
+// DeleteBranch force-deletes a local branch. Best-effort.
+func DeleteBranch(cwd, branch string) error {
+	_, err := git(cwd, "branch", "-D", branch)
+	return err
+}
+
+// PruneWorktrees runs `git worktree prune`. Best-effort.
+func PruneWorktrees(cwd string) error {
+	_, err := git(cwd, "worktree", "prune")
+	return err
+}
+
+// ParseWorktreePaths extracts the worktree paths from `git worktree list
+// --porcelain` output. Pure (string parsing only) so it can be unit-tested.
+func ParseWorktreePaths(porcelain string) []string {
+	paths := make([]string, 0)
+	for _, block := range strings.Split(porcelain, "\n\n") {
+		for _, line := range strings.Split(block, "\n") {
+			if strings.HasPrefix(line, "worktree ") {
+				paths = append(paths, strings.TrimSpace(strings.TrimPrefix(line, "worktree ")))
+				break
+			}
+		}
+	}
+	return paths
+}
+
 // EnsureWorktreesIgnored appends ".worktrees/" to the repo's local
 // <git-common-dir>/info/exclude (not .gitignore, so it works in any repo and
 // stays uncommitted). Idempotent and best-effort: any error is returned but
