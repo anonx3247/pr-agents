@@ -44,6 +44,32 @@ func TestResolveContextFromCwd(t *testing.T) {
 	}
 }
 
+func TestDepthFromCwd(t *testing.T) {
+	entries := []PrEntry{
+		{ID: "wt1", Worktree: "/repo/.worktrees/pr-1", Depth: 1},
+		{ID: "wt2", Worktree: "/repo/.worktrees/pr-1/nested", Depth: 2},
+	}
+	tests := []struct {
+		name string
+		cwd  string
+		want int
+	}{
+		{"orchestrator in main repo", "/repo", 0},
+		{"unregistered path", "/elsewhere", 0},
+		{"depth-1 worktree", "/repo/.worktrees/pr-1", 1},
+		{"descendant of depth-1 worktree", "/repo/.worktrees/pr-1/src", 1},
+		{"nested depth-2 worktree", "/repo/.worktrees/pr-1/nested", 2},
+		{"descendant of nested worktree", "/repo/.worktrees/pr-1/nested/deep", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DepthFromCwd(entries, tt.cwd); got != tt.want {
+				t.Errorf("DepthFromCwd(%q) = %d, want %d", tt.cwd, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPickRedockAgent(t *testing.T) {
 	alive := func(id string) bool { return id != "%dead" }
 	entries := []PrEntry{
