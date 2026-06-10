@@ -137,6 +137,19 @@ func buildTaskMessage(name, branch, base string, mode core.Mode, task string, si
 	return strings.Join(lines, "\n")
 }
 
+// dispatchPaneEnv builds the minimal pane environment for a dispatched worker:
+// only the orchestrator-side contract that a nested dispatch inherits (session
+// ownership + harness/launcher defaults). The worker derives its OWN identity
+// from cwd→registry, so no worker-targeted PRA_* vars are emitted (they would
+// not survive a sandbox boundary anyway). Pure.
+func dispatchPaneEnv(session, harnessKind, launcher string) map[string]string {
+	return map[string]string{
+		core.EnvSession:  session,
+		core.EnvHarness:  harnessKind,
+		core.EnvLauncher: launcher,
+	}
+}
+
 // removeEntryByID returns entries with any entry matching id removed. Pure.
 func removeEntryByID(entries []core.PrEntry, id string) []core.PrEntry {
 	out := make([]core.PrEntry, 0, len(entries))
@@ -305,15 +318,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 
 	id := genID()
-	// Pane env is deliberately minimal: only the orchestrator-side contract that
-	// a nested dispatch inherits (session ownership + harness/launcher defaults).
-	// The worker derives its OWN identity from cwd→registry, so no worker-targeted
-	// PRA_* vars are emitted (they would not survive a sandbox boundary anyway).
-	env := map[string]string{
-		core.EnvSession:  session,
-		core.EnvHarness:  o.harness,
-		core.EnvLauncher: o.launcher,
-	}
+	env := dispatchPaneEnv(session, o.harness, o.launcher)
 	spec.Env = env
 
 	command := buildLaunchCommand(o.launcher, adapter.BuildArgs(spec, instructionsPath), os.Getenv("SHELL"))

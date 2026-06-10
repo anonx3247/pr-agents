@@ -217,3 +217,25 @@ func TestPiBuildArgsThroughCommand(t *testing.T) {
 		t.Error("buildLaunchCommand mutated its args slice")
 	}
 }
+
+func TestDispatchPaneEnv(t *testing.T) {
+	env := dispatchPaneEnv("sess1", "codex", "isara codex run")
+	want := map[string]string{
+		core.EnvSession:  "sess1",
+		core.EnvHarness:  "codex",
+		core.EnvLauncher: "isara codex run",
+	}
+	if !reflect.DeepEqual(env, want) {
+		t.Fatalf("dispatchPaneEnv = %#v, want %#v", env, want)
+	}
+	// The worker-targeted PRA_* vars must NOT be emitted: a worker derives its
+	// identity/depth from cwd→registry, so these would only mislead.
+	for _, dropped := range []string{
+		"PRA_DEPTH", "PRA_ID", "PRA_MODE", "PRA_BASE",
+		"PRA_BRANCH", "PRA_NAME", "PRA_SIMPLIFY",
+	} {
+		if _, ok := env[dropped]; ok {
+			t.Errorf("dispatch pane env must not emit %s", dropped)
+		}
+	}
+}
