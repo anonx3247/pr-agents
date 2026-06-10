@@ -93,6 +93,12 @@ inside tmux. It polls:
 - **Dock auto-flip** — keeps the newest live PR pane docked right of the
   orchestrator (opt out with `--no-dock`); the orchestrator pane is never
   broken or killed.
+- **Session capture → registry** — for every live depth-1 worker with an empty
+  `WorkerSessionRef`, the daemon resolves the harness-specific resumable session
+  reference (claude uuid / pi session-file path / codex session id) via
+  `harness.Get(kind).SessionRef` once the worker's session file appears on disk,
+  and persists it (with its harness kind) to the entry. It is idempotent (set
+  once), bounded (a miss retries next tick), and local-only (no network).
 
 The CLI uses only the Go stdlib `flag` package plus a small hand-rolled
 subcommand dispatch — no third-party CLI framework — to keep dependencies

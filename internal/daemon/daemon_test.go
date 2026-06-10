@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/anonx3247/pr-agents/internal/core"
 )
@@ -206,6 +207,64 @@ func TestPollWorkersReviewAndCi(t *testing.T) {
 	d.pollWorkers()
 	if got := tm.messagesTo("%a"); len(got) != 0 {
 		t.Errorf("expected dedup, got %#v", got)
+	}
+}
+
+// fakeResolver records its calls and returns a canned ref/ok keyed by cwd, so
+// session capture is tested without scanning the real session stores.
+type fakeResolver struct {
+	refByCwd map[string]string
+	calls    int
+}
+
+func (f *fakeResolver) resolve(_ /*kind*/, cwd string, _ time.Time) (string, bool) {
+	f.calls++
+	ref, ok := f.refByCwd[cwd]
+	return ref, ok
+}
+
+func TestCaptureSessionsCapturesOnce(t *testing.T) {
+	e := worker("a", 1)
+	st := &fakeStore{entries: []core.PrEntry{e}}
+	tm := &fakeTmux{alive: map[string]bool{"%a": true}}
+	fr := &fakeResolver{refByCwd: map[string]string{"/wt/a": "sess-ref-a"}}
+	d := newDaemon(Config{Harness: "pi"}, &fakeGH{}, tm, st)
+	d.resolveSession = fr.resolve
+
+	d.captureSessions()
+	if got := st.entries[0].WorkerSessionRef; got != "sess-ref-a" {
+		t.Fatalf("WorkerSessionRef = %q, want sess-ref-a", got)
+	}
+	if got := st.entries[0].WorkerSessionHarness; got != "pi" {
+		t.Errorf("WorkerSessionHarness = %q, want pi", got)
+	}
+
+	// A second tick is a no-op: the entry now has a ref, so the resolver is not
+	// consulted again.
+	before := fr.calls
+	d.captureSessions()
+	if fr.calls != before {
+		t.Errorf("resolver called again after capture: calls went %d -> %d", before, fr.calls)
+	}
+}
+
+func TestCaptureSessionsNotFoundRetries(t *testing.T) {
+	e := worker("a", 1)
+	st := &fakeStore{entries: []core.PrEntry{e}}
+	tm := &fakeTmux{alive: map[string]bool{"%a": true}}
+	fr := &fakeResolver{refByCwd: map[string]string{}} // resolver finds nothing yet
+	d := newDaemon(Config{Harness: "pi"}, &fakeGH{}, tm, st)
+	d.resolveSession = fr.resolve
+
+	d.captureSessions()
+	if st.entries[0].WorkerSessionRef != "" {
+		t.Errorf("WorkerSessionRef = %q, want empty (left for retry)", st.entries[0].WorkerSessionRef)
+	}
+	// The entry is still eligible, so a later tick retries (resolver called again).
+	before := fr.calls
+	d.captureSessions()
+	if fr.calls <= before {
+		t.Errorf("resolver not retried: calls stayed at %d", fr.calls)
 	}
 }
 
