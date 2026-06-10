@@ -248,6 +248,44 @@ func TestCaptureSessionsCapturesOnce(t *testing.T) {
 	}
 }
 
+func TestCaptureSessionsUsesEntryHarness(t *testing.T) {
+	// Entry dispatched with codex while the daemon's own harness is pi: capture
+	// must resolve via the ENTRY's harness and stamp it on WorkerSessionHarness.
+	e := worker("a", 1)
+	e.Harness = "codex"
+	st := &fakeStore{entries: []core.PrEntry{e}}
+	tm := &fakeTmux{alive: map[string]bool{"%a": true}}
+	var gotKind string
+	d := newDaemon(Config{Harness: "pi"}, &fakeGH{}, tm, st)
+	d.resolveSession = func(kind, _ string, _ time.Time) (string, bool) {
+		gotKind = kind
+		return "ref", true
+	}
+	d.captureSessions()
+	if gotKind != "codex" {
+		t.Errorf("resolver kind = %q, want codex (entry harness)", gotKind)
+	}
+	if got := st.entries[0].WorkerSessionHarness; got != "codex" {
+		t.Errorf("WorkerSessionHarness = %q, want codex", got)
+	}
+}
+
+func TestCaptureSessionsLegacyEntryFallsBackToDaemonHarness(t *testing.T) {
+	// Legacy entry with no Harness: capture falls back to the daemon's harness.
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1)}}
+	tm := &fakeTmux{alive: map[string]bool{"%a": true}}
+	var gotKind string
+	d := newDaemon(Config{Harness: "pi"}, &fakeGH{}, tm, st)
+	d.resolveSession = func(kind, _ string, _ time.Time) (string, bool) {
+		gotKind = kind
+		return "ref", true
+	}
+	d.captureSessions()
+	if gotKind != "pi" || st.entries[0].WorkerSessionHarness != "pi" {
+		t.Errorf("kind=%q harness=%q, want pi/pi", gotKind, st.entries[0].WorkerSessionHarness)
+	}
+}
+
 func TestCaptureSessionsNotFoundRetries(t *testing.T) {
 	e := worker("a", 1)
 	st := &fakeStore{entries: []core.PrEntry{e}}

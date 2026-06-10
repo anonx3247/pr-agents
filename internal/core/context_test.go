@@ -147,6 +147,82 @@ func TestSelectSessionCaptureTargets(t *testing.T) {
 	}
 }
 
+func TestResolveScopeID(t *testing.T) {
+	ref := func(r string, ok bool) ScopeRefResolver {
+		return func() (string, bool) { return r, ok }
+	}
+	fallback := func() string { return "RANDOM" }
+	tests := []struct {
+		name     string
+		resolver ScopeRefResolver
+		env      string
+		want     string
+	}{
+		{"harness ref wins over env", ref("REF", true), "ENV", "REF"},
+		{"ref trimmed", ref("  REF ", true), "ENV", "REF"},
+		{"blank ref falls through to env", ref("   ", true), "ENV", "ENV"},
+		{"ref ok=false falls through to env", ref("REF", false), "ENV", "ENV"},
+		{"nil resolver uses env", nil, "ENV", "ENV"},
+		{"env trimmed", ref("", false), "  ENV  ", "ENV"},
+		{"no ref no env uses fallback", ref("", false), "", "RANDOM"},
+		{"nil resolver empty env uses fallback", nil, "", "RANDOM"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ResolveScopeID(tt.resolver, tt.env, fallback); got != tt.want {
+				t.Errorf("ResolveScopeID = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEntryHarness(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    PrEntry
+		fallback string
+		want     string
+	}{
+		{"captured wins", PrEntry{WorkerSessionHarness: "claude", Harness: "pi"}, "codex", "claude"},
+		{"dispatched when no captured", PrEntry{Harness: "pi"}, "codex", "pi"},
+		{"fallback when legacy entry", PrEntry{}, "codex", "codex"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EntryHarness(tt.entry, tt.fallback); got != tt.want {
+				t.Errorf("EntryHarness = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSelectRevivableAgents(t *testing.T) {
+	checks := RevivableChecks{
+		PaneAlive:         func(p string) bool { return p == "%live" },
+		WorktreeExists:    func(p string) bool { return p != "/gone" },
+		SessionResolvable: func(e PrEntry) bool { return e.WorkerSessionRef != "" },
+	}
+	entries := []PrEntry{
+		{ID: "revivable", Depth: 1, Status: StatusWorking, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: "ref"},
+		{ID: "deadnopane", Depth: 1, Status: StatusOpen, PaneID: "", Worktree: "/wt", WorkerSessionRef: "ref"},             // empty pane = dead
+		{ID: "live", Depth: 1, Status: StatusWorking, PaneID: "%live", Worktree: "/wt", WorkerSessionRef: "ref"},           // skip: still running
+		{ID: "merged", Depth: 1, Status: StatusMerged, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: "ref"},          // skip: terminal
+		{ID: "closed", Depth: 1, Status: StatusClosed, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: "ref"},          // skip: terminal
+		{ID: "stopped", Depth: 1, Status: StatusStopped, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: "ref"},        // skip: terminal
+		{ID: "helper", Depth: 2, Status: StatusWorking, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: "ref"},         // skip: depth-2
+		{ID: "noworktree", Depth: 1, Status: StatusWorking, PaneID: "%dead", Worktree: "", WorkerSessionRef: "ref"},        // skip: no worktree
+		{ID: "goneworktree", Depth: 1, Status: StatusWorking, PaneID: "%dead", Worktree: "/gone", WorkerSessionRef: "ref"}, // skip: reaped
+		{ID: "noref", Depth: 1, Status: StatusWorking, PaneID: "%dead", Worktree: "/wt", WorkerSessionRef: ""},             // skip: no session
+	}
+	got := SelectRevivableAgents(entries, checks)
+	if ids := idsOf(got); !reflect.DeepEqual(ids, []string{"revivable", "deadnopane"}) {
+		t.Errorf("revivable = %v, want [revivable deadnopane]", ids)
+	}
+	if got := SelectRevivableAgents(nil, checks); len(got) != 0 {
+		t.Errorf("empty: got %v, want none", got)
+	}
+}
+
 func TestSelectCleanupTargets(t *testing.T) {
 	entries := []PrEntry{
 		{ID: "merged", Branch: "br-m", Base: "main", Depth: 1, PrNumber: ptr(1)},
