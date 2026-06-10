@@ -2,7 +2,9 @@ package harness
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // sessionHomeOverride, when non-empty, replaces os.UserHomeDir() as the base
@@ -19,6 +21,39 @@ func sessionStoreHome() (string, error) {
 		return sessionHomeOverride, nil
 	}
 	return os.UserHomeDir()
+}
+
+// newestFileInDir returns the absolute path of the newest regular file in dir
+// whose modification time is at or after since and for which match(name) is
+// true (a nil match accepts every file). It returns ok=false when dir is
+// missing/unreadable or nothing matches, so callers tolerate an absent store
+// without panicking.
+func newestFileInDir(dir string, since time.Time, match func(name string) bool) (path string, ok bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	var best time.Time
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if match != nil && !match(e.Name()) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		mt := info.ModTime()
+		if mt.Before(since) {
+			continue
+		}
+		if !ok || mt.After(best) {
+			path, best, ok = filepath.Join(dir, e.Name()), mt, true
+		}
+	}
+	return path, ok
 }
 
 // encodeClaudeProjectDir mirrors Claude Code's project-directory naming scheme:

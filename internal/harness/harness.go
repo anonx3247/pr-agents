@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Role is the part an agent plays in the PR fleet. Instruction templates are
@@ -70,6 +71,14 @@ type Adapter interface {
 	// InstructionFileName is the file an InstructionFile adapter expects (e.g.
 	// "AGENTS.md"); "" for flag-based adapters.
 	InstructionFileName() string
+	// SessionRef locates the resumable session reference for a harness session
+	// running in cwd, by scanning that harness's on-disk session store. since
+	// lets callers ignore sessions created before the worker was dispatched
+	// (e.g. the registry entry's CreatedAt). It returns ok=false when nothing
+	// matches or the store dir is absent; it never panics on a missing store.
+	// The exact ref shape is harness-specific (uuid for claude/codex, absolute
+	// session file path for pi).
+	SessionRef(cwd string, since time.Time) (ref string, ok bool)
 }
 
 // registry maps adapter kind → Adapter. Populated by each adapter's init.
