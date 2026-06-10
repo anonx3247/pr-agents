@@ -217,7 +217,7 @@ type fakeResolver struct {
 	calls    int
 }
 
-func (f *fakeResolver) resolve(_ /*kind*/, cwd string, _ time.Time) (string, bool) {
+func (f *fakeResolver) resolve(_, cwd string, _ time.Time) (string, bool) {
 	f.calls++
 	ref, ok := f.refByCwd[cwd]
 	return ref, ok

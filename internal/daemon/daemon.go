@@ -222,10 +222,9 @@ func (d *Daemon) captureSessions() {
 		if !ok {
 			continue
 		}
-		kind := d.cfg.Harness
 		d.store.Update(e.ID, func(p *core.PrEntry) {
 			p.WorkerSessionRef = ref
-			p.WorkerSessionHarness = kind
+			p.WorkerSessionHarness = d.cfg.Harness
 		})
 	}
 }
