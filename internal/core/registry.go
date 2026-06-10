@@ -41,6 +41,12 @@ type PrEntry struct {
 	Branch    string `json:"branch"`
 	Base      string `json:"base"`
 	Mode      Mode   `json:"mode"`
+	// Harness records the harness kind (pi | claude | codex) this worker was
+	// DISPATCHED with (the `--harness` value), so capture and revive pick the
+	// adapter via the ENTRY's own harness rather than the orchestrator's. Empty
+	// on legacy entries, in which case callers fall back to the daemon /
+	// orchestrator harness.
+	Harness   string `json:"harness,omitempty"`
 	PaneID    string `json:"paneId"`
 	Worktree  string `json:"worktree"`
 	Depth     int    `json:"depth"`
@@ -174,6 +180,21 @@ func EntriesForSession(entries []PrEntry, sessionID string) []PrEntry {
 		}
 	}
 	return out
+}
+
+// EntryHarness resolves the harness kind to use for an entry's session
+// operations (SessionRef capture, resume). The captured WorkerSessionHarness
+// wins (it is the resume-time source of truth, recorded alongside the ref),
+// else the harness the worker was dispatched with, else the supplied fallback
+// (the daemon/orchestrator harness) for backward-compatible legacy entries.
+func EntryHarness(e PrEntry, fallback string) string {
+	if e.WorkerSessionHarness != "" {
+		return e.WorkerSessionHarness
+	}
+	if e.Harness != "" {
+		return e.Harness
+	}
+	return fallback
 }
 
 // FindEntry resolves a human-friendly ref to an entry: exact id, id prefix,

@@ -334,6 +334,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		Branch:    plan.branch,
 		Base:      plan.base,
 		Mode:      plan.mode,
+		Harness:   o.harness,
 		Worktree:  worktree,
 		Depth:     depth + 1,
 		ParentID:  parentID,
