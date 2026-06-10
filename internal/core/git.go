@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,11 +13,14 @@ import (
 // gitTimeout bounds every git invocation so a hung git never blocks the CLI.
 const gitTimeout = 30 * time.Second
 
-// git runs `git args...` in cwd and returns trimmed stdout, or an error.
+// git runs `git args...` in cwd (bounded by gitTimeout) and returns trimmed
+// stdout, or an error.
 func git(cwd string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = cwd
-	out, err := runWithTimeout(cmd, gitTimeout)
+	out, err := cmd.Output()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -28,31 +32,6 @@ func tryGit(cwd string, args ...string) (string, bool) {
 	}
 	return out, true
 }
-
-// runWithTimeout runs cmd, capturing combined stdout, killing it after d.
-func runWithTimeout(cmd *exec.Cmd, d time.Duration) ([]byte, error) {
-	var out strings.Builder
-	cmd.Stdout = &out
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	select {
-	case <-time.After(d):
-		_ = cmd.Process.Kill()
-		<-done
-		return nil, errTimeout
-	case err := <-done:
-		return []byte(out.String()), err
-	}
-}
-
-type timeoutError struct{}
-
-func (timeoutError) Error() string { return "git command timed out" }
-
-var errTimeout = timeoutError{}
 
 // RepoRoot returns the absolute path of the working tree's top level.
 func RepoRoot(cwd string) (string, error) {
