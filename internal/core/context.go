@@ -164,6 +164,52 @@ func SelectSessionCaptureTargets(entries []PrEntry, isAlive func(paneID string) 
 	return out
 }
 
+// RevivableChecks injects the liveness/filesystem/session facts that
+// SelectRevivableAgents needs, keeping the selection pure and unit-testable
+// without touching tmux, the filesystem, or the real "~" session stores.
+type RevivableChecks struct {
+	// PaneAlive reports whether a pane id is still a live tmux pane.
+	PaneAlive func(paneID string) bool
+	// WorktreeExists reports whether the entry's worktree dir still exists.
+	WorktreeExists func(path string) bool
+	// SessionResolvable reports whether the entry carries a usable
+	// WorkerSessionRef that its harness can resume.
+	SessionResolvable func(e PrEntry) bool
+}
+
+// SelectRevivableAgents returns the entries that should be REVIVED on
+// orchestrator resume (a port of pi's selectRevivableAgents). An entry is
+// revivable when it is a depth-1 PR worker, non-terminal, its tmux pane is DEAD,
+// its worktree still EXISTS on disk, and it has a resumable WorkerSessionRef.
+//
+// Depth-2 helpers are intentionally EXCLUDED: a revived worker re-spawns its own
+// helpers if it needs them, so reviving helpers here would double them. Live
+// panes (still running), terminal/finished entries (merged/closed/stopped), and
+// entries whose worktree was reaped are all skipped too. Pure: every fact comes
+// from checks, so it is table-testable with fakes.
+func SelectRevivableAgents(entries []PrEntry, checks RevivableChecks) []PrEntry {
+	out := make([]PrEntry, 0)
+	for _, e := range entries {
+		if e.Depth != 1 {
+			continue // depth-2 helpers are re-spawned by their revived parent
+		}
+		if e.Status == StatusMerged || e.Status == StatusClosed || e.Status == StatusStopped {
+			continue // terminal/finished: nothing to revive
+		}
+		if e.PaneID != "" && checks.PaneAlive(e.PaneID) {
+			continue // still running
+		}
+		if e.Worktree == "" || !checks.WorktreeExists(e.Worktree) {
+			continue // worktree reaped; cannot resume in place
+		}
+		if !checks.SessionResolvable(e) {
+			continue // no usable session ref to resume
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // CleanupTarget pairs an entry selected for removal with the human-readable
 // reason it is being reaped.
 type CleanupTarget struct {
