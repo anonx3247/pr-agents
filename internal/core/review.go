@@ -147,9 +147,9 @@ func issueKey(c IssueComment) string {
 // review comments arrive. It lists each comment as
 // "- [rc:<id>] <path>:<line> — <body>" plus any context notes, then the fixed
 // instructions: address with code, run the Go gate, commit, push, and REPLY to
-// each thread via the harness reply tool or `pr-agents reply-review` (NOT raw
-// gh, so the reply is recorded in the seen-set and never re-surfaced) WITHOUT
-// resolving threads. Pure.
+// each thread via the harness reply tool or `pr-agents tool reply-review` (NOT
+// raw gh, so the reply is recorded in the seen-set and never re-surfaced)
+// WITHOUT resolving threads. Pure.
 func BuildReviewTask(actionable []InlineComment, contextNotes []string, prNumber int) string {
 	lines := []string{
 		fmt.Sprintf("New review feedback on PR #%d. Address each reviewer comment below.", prNumber),
@@ -172,7 +172,7 @@ func BuildReviewTask(actionable []InlineComment, contextNotes []string, prNumber
 	lines = append(lines, "", strings.Join([]string{
 		"Address each comment with code changes; run the gate — `gofmt -l .`, `go vet ./...`, `go test ./...`;",
 		"commit (e.g. `fix: address review feedback`); push with `git push`; then REPLY to EACH inline",
-		"thread using your harness's reply tool (`reply_to_review_comment`) or `pr-agents reply-review",
+		"thread using your harness's reply tool (`reply_to_review_comment`) or `pr-agents tool reply-review",
 		"<commentId> <body>` — do NOT reply with raw `gh`, because these record your reply so the daemon",
 		"does not re-surface it as new feedback. commentId is the numeric id from `rc:<id>` and body is a",
 		"short explanation of the fix or a clarifying question. Do NOT resolve threads — leave that to the",

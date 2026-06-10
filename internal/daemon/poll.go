@@ -43,7 +43,7 @@ func (d *Daemon) pollPrState() {
 
 // pollFinished notifies the orchestrator when a worker's reported result
 // advances. It is purely registry-driven (no pane scraping): workers call
-// `pr-agents report-result "<summary>"` as their final step, which bumps
+// `pr-agents tool report-result "<summary>"` as their final step, which bumps
 // ResultSeq, and SelectNewlyFinished dedups against the in-memory last-seen map.
 func (d *Daemon) pollFinished() {
 	if d.cfg.OrchestratorPane == "" {
