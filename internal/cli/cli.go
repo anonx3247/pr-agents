@@ -22,8 +22,8 @@ type command struct {
 	run     func(args []string, stdout, stderr io.Writer) int
 }
 
-// commands is the dispatch table. select/daemon remain stubs until later PRs
-// implement them.
+// commands is the dispatch table. select remains a stub until a later PR
+// implements the interactive picker.
 var commands = map[string]command{
 	"version":       {"Print the pr-agents version", runVersion},
 	"start":         {"Launch the orchestrator in a tmux session", runStart},
@@ -39,7 +39,7 @@ var commands = map[string]command{
 	"mark-pushed":   {"Mark the current worker's PR as pushed (starts polling)", runMarkPushed},
 	"report-result": {"Record the current worker's final result text", runReportResult},
 	"select":        {"Interactively select a PR agent", stub("select")},
-	"daemon":        {"Run the per-session background daemon", stub("daemon")},
+	"daemon":        {"Run the per-session background daemon", runDaemon},
 }
 
 // Run is the entrypoint invoked by main. It parses the root flags, resolves the

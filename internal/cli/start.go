@@ -161,9 +161,9 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	os.Setenv(core.EnvHarness, harnessKind)
 	os.Setenv(core.EnvLauncher, launcher)
 
-	// Best-effort: start the per-session daemon detached. It is a stub until a
-	// later PR; failure or a no-op must not block the orchestrator.
-	startDaemon()
+	// Best-effort: start the per-session daemon detached. Failure or a no-op
+	// (e.g. not inside tmux) must never block the orchestrator.
+	startDaemon(session, harnessKind, launcher, orchestratorPane())
 
 	argv := buildOrchestratorArgv(launcher, adapter.BuildArgs(spec, instructionsPath), extra)
 	if len(argv) == 0 {
@@ -182,14 +182,33 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	return 0
 }
 
-// startDaemon spawns `pr-agents daemon` detached, swallowing any error (the
-// daemon is a stub until a later PR).
-func startDaemon() {
+// orchestratorPane resolves the orchestrator's OWN tmux pane id so the daemon
+// can target it for cleanup/finished notifications. Prefers $TMUX_PANE (set by
+// tmux for every pane), falling back to a display-message query. Returns ""
+// when it can't be resolved (the daemon then skips orchestrator notifications).
+func orchestratorPane() string {
+	if p := os.Getenv("TMUX_PANE"); p != "" {
+		return p
+	}
+	if p, ok := tmux.TryTmux("display-message", "-p", "#{pane_id}"); ok {
+		return p
+	}
+	return ""
+}
+
+// startDaemon spawns `pr-agents daemon` detached, carrying the session id, the
+// orchestrator's pane id, and the harness/launcher contract. Best-effort: any
+// error is swallowed and the daemon exits cleanly when there is nothing to do.
+func startDaemon(session, harnessKind, launcher, orchPane string) {
 	self, err := os.Executable()
 	if err != nil {
 		return
 	}
-	cmd := exec.Command(self, "daemon")
+	args := []string{"daemon", "--session", session, "--harness", harnessKind, "--launcher", launcher}
+	if orchPane != "" {
+		args = append(args, "--orchestrator-pane", orchPane)
+	}
+	cmd := exec.Command(self, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	_ = cmd.Start()
