@@ -64,8 +64,19 @@ polling this PR for merge/close and review/CI feedback.
 ## Stay available for feedback
 
 After opening the PR, stay alive. When a reviewer leaves comments or CI fails,
-the orchestrator will steer you with a fresh task. Address it in code, run the
-gate, commit, and push. **Never disable or weaken checks to make CI pass.**
+the per-session daemon will steer you with a fresh task on your pane. Address it
+in code, run the gate, commit, and push. **Never disable or weaken checks to
+make CI pass.**
 
-End with a concise summary: branch, PR number/url, commits made, how you
-verified, and any follow-up PRs you recommend.
+## Report your result as the final step
+
+When you are done (PR opened, or you have nothing left to do this turn), record a
+concise summary in the registry as your FINAL step:
+
+```
+pr-agents report-result "<one-paragraph summary: branch, PR number/url, commits, how you verified, follow-ups>"
+```
+
+This is what tells the daemon to notify the orchestrator that you finished — it
+is purely registry-driven, so do not rely on the orchestrator reading your pane.
+Call it again whenever you finish a later round of feedback.
