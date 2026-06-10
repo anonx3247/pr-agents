@@ -176,7 +176,7 @@ func TestInstructions(t *testing.T) {
 		contains []string
 	}{
 		{RoleOrchestrator, []string{"PR-orchestrator", "pr-agents dispatch", "pr-agents cleanup"}},
-		{RoleWorker, []string{"pr-agents context", "set-pr-number", "mark-pushed", "feature-base", "graphite", "gt track --parent feature-base feature-branch"}},
+		{RoleWorker, []string{"pr-agents tool context", "tool set-pr-number", "tool mark-pushed", "feature-base", "graphite", "gt track --parent feature-base feature-branch"}},
 		{RoleHelper, []string{"helper subagent", "cannot"}},
 	}
 	for _, tt := range tests {
