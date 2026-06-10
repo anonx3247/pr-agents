@@ -70,6 +70,50 @@ func TestMaintainDockNoDock(t *testing.T) {
 	}
 }
 
+// finished builds an idle (finished, not stopped) depth-1 agent: it reported a
+// result at lastResultAt and has not been re-activated since.
+func finished(id, pane, createdAt, lastResultAt string) core.PrEntry {
+	e := agent(id, pane, createdAt)
+	e.Status = core.StatusOpen
+	e.ResultSeq = intp(1)
+	e.LastResultAt = lastResultAt
+	return e
+}
+
+func TestMaintainDockFollowsWorkingAgent(t *testing.T) {
+	// a is newer but finished/idle; b is older and still working (no result).
+	idle := finished("a", "%a", "2024-03-01T00:00:00Z", "2024-03-02T00:00:00Z")
+	working := agent("b", "%b", "2024-01-01T00:00:00Z") // no result => working
+	st := &fakeStore{entries: []core.PrEntry{idle, working}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true, "%a": true, "%b": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, &fakeGH{}, tm, st)
+
+	d.maintainDock()
+	if d.dockedPane != "%b" {
+		t.Fatalf("docked = %q, want %%b (the working agent, not the newer idle one)", d.dockedPane)
+	}
+}
+
+func TestMaintainDockFlipsWhenIdleAgentReactivated(t *testing.T) {
+	// Both agents are finished/idle; the newest (a) is docked initially.
+	a := finished("a", "%a", "2024-03-01T00:00:00Z", "2024-03-02T00:00:00Z")
+	b := finished("b", "%b", "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
+	st := &fakeStore{entries: []core.PrEntry{a, b}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true, "%a": true, "%b": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, &fakeGH{}, tm, st)
+	d.maintainDock()
+	if d.dockedPane != "%a" {
+		t.Fatalf("initial docked = %q, want %%a (newest while all idle)", d.dockedPane)
+	}
+	// b is handed a fresh review task => it starts working and should be docked.
+	d.now = func() string { return "2024-09-01T00:00:00Z" }
+	d.markActive("b")
+	d.maintainDock()
+	if d.dockedPane != "%b" {
+		t.Fatalf("docked = %q, want %%b after re-activation", d.dockedPane)
+	}
+}
+
 func TestMaintainDockNeverTouchesOrchestrator(t *testing.T) {
 	// An (impossible) entry whose pane IS the orchestrator must never be docked.
 	st := &fakeStore{entries: []core.PrEntry{agent("a", "orch", "2024-01-01")}}

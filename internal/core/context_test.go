@@ -67,6 +67,39 @@ func TestPickRedockAgent(t *testing.T) {
 	}
 }
 
+func TestPickWorkingAgent(t *testing.T) {
+	alive := func(string) bool { return true }
+	entries := []PrEntry{
+		{ID: "old", Depth: 1, PaneID: "%1", CreatedAt: "2024-01-01T00:00:00Z"},
+		{ID: "new", Depth: 1, PaneID: "%2", CreatedAt: "2024-03-01T00:00:00Z"},
+	}
+	working := func(e PrEntry) bool { return true }
+	noActivity := func(PrEntry) string { return "" }
+
+	// No activity recorded: ranks by CreatedAt, newest wins.
+	if got := PickWorkingAgent(entries, alive, working, noActivity); got == nil || got.ID != "new" {
+		t.Fatalf("got %v, want new", got)
+	}
+
+	// The older agent was just re-activated (handed a task) → it now ranks above
+	// the newer-but-idle agent.
+	activity := func(e PrEntry) string {
+		if e.ID == "old" {
+			return "2024-09-01T00:00:00Z"
+		}
+		return ""
+	}
+	if got := PickWorkingAgent(entries, alive, working, activity); got == nil || got.ID != "old" {
+		t.Fatalf("got %v, want old (most recently active)", got)
+	}
+
+	// Only the idle/finished agent is excluded; when none works, nil.
+	noneWorking := func(PrEntry) bool { return false }
+	if got := PickWorkingAgent(entries, alive, noneWorking, noActivity); got != nil {
+		t.Errorf("none working: got %v, want nil", got)
+	}
+}
+
 func TestSelectCleanupTargets(t *testing.T) {
 	entries := []PrEntry{
 		{ID: "merged", Branch: "br-m", Base: "main", Depth: 1, PrNumber: ptr(1)},

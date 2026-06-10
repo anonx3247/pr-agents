@@ -84,6 +84,14 @@ type Daemon struct {
 	lastSeenResult map[string]int
 	ownerRepo      *ownerRepo
 	dockedPane     string
+	// lastActivated maps entry id → RFC3339 time the daemon last handed that
+	// worker a task (review/CI). It distinguishes a worker that is busy on fresh
+	// work from one that has gone idle after reporting a result, so the dock can
+	// follow whichever agent is actually working.
+	lastActivated map[string]string
+	// now is the activity clock (RFC3339), injectable so dock tests are
+	// deterministic.
+	now func() string
 }
 
 type ownerRepo struct {
@@ -107,6 +115,8 @@ func New(cfg Config, gh GH, tm Tmuxer, store Store, cwd string) *Daemon {
 		cwd:            cwd,
 		lastState:      map[string]core.PrStateClass{},
 		lastSeenResult: map[string]int{},
+		lastActivated:  map[string]string{},
+		now:            func() string { return time.Now().UTC().Format(time.RFC3339) },
 	}
 }
 

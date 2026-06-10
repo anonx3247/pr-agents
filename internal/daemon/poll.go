@@ -89,6 +89,7 @@ func (d *Daemon) pollWorkers() {
 						seen[id] = true
 					}
 					d.tm.SendToPane(e.PaneID, core.BuildReviewTask(sel.Actionable, sel.ContextNotes, *e.PrNumber))
+					d.markActive(e.ID)
 				}
 			}
 		}
@@ -99,9 +100,17 @@ func (d *Daemon) pollWorkers() {
 			if len(sel.Failures) > 0 {
 				d.markSeen(e.ID, sel.NewKeys)
 				d.tm.SendToPane(e.PaneID, core.BuildCiFixTask(sel.Failures, *e.PrNumber))
+				d.markActive(e.ID)
 			}
 		}
 	}
+}
+
+// markActive records that the daemon just handed a worker a fresh task, so the
+// dock follows it as a now-working agent even if it had previously reported a
+// result and gone idle.
+func (d *Daemon) markActive(id string) {
+	d.lastActivated[id] = d.now()
 }
 
 // markSeen merges newIDs into the entry's persisted seen-set (a union, never an

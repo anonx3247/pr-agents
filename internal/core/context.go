@@ -70,6 +70,42 @@ func PickRedockAgent(entries []PrEntry, isAlive func(paneID string) bool) *PrEnt
 	return best
 }
 
+// PickWorkingAgent chooses the most-recently-ACTIVE live depth-1 agent that is
+// currently WORKING (handed a task it has not reported finishing), or nil when
+// none is working. Working-ness and liveness are injected predicates so the
+// logic stays pure; recency uses activatedAt (a sortable RFC3339 activity
+// timestamp) falling back to CreatedAt, so a freshly-dispatched agent that has
+// never been re-activated still ranks by when it was created.
+//
+// The daemon prefers this over PickRedockAgent so the docked pane follows the
+// agent that is actually doing work: when the docked agent goes idle/stopped and
+// another agent starts (e.g. handling fresh review comments), the dock flips to
+// the working one.
+func PickWorkingAgent(
+	entries []PrEntry,
+	isAlive func(paneID string) bool,
+	isWorking func(e PrEntry) bool,
+	activatedAt func(e PrEntry) string,
+) *PrEntry {
+	var best *PrEntry
+	var bestRank string
+	for i := range entries {
+		e := &entries[i]
+		if e.Depth != 1 || e.PaneID == "" || !isAlive(e.PaneID) || !isWorking(*e) {
+			continue
+		}
+		rank := activatedAt(*e)
+		if rank < e.CreatedAt {
+			rank = e.CreatedAt
+		}
+		if best == nil || rank > bestRank {
+			best = e
+			bestRank = rank
+		}
+	}
+	return best
+}
+
 // CleanupTarget pairs an entry selected for removal with the human-readable
 // reason it is being reaped.
 type CleanupTarget struct {
