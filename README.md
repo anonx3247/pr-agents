@@ -59,11 +59,12 @@ minimal.
 ## State & configuration
 
 - **Shared registry** — dispatched PRs are tracked in
-  `<git-common-dir>/pr-agents/registry.json`, shared by the main checkout and
+  `<git-common-dir>/.pr-agents/registry.json`, shared by the main checkout and
   every worktree, so each agent sees the same set of PRs. Writes are atomic
   (temp file + rename).
 - **Project config** — the default stacking strategy (`github` | `graphite`)
-  used when stacking dependent PRs is stored at `<repo-root>/.pi/pr-agents.json`.
+  used when stacking dependent PRs is stored at `<repo-root>/.pr-agents.json`
+  (harness-agnostic: at the repo root, not under a harness-specific dir).
 - **Depth & environment** — nesting depth and dispatch parameters are carried
   across harness processes via `PRA_*` environment variables (`PRA_DEPTH`,
   `PRA_SESSION`, `PRA_ID`, `PRA_MODE`, `PRA_BASE`, `PRA_BRANCH`, `PRA_NAME`,

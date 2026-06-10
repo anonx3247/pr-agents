@@ -22,19 +22,15 @@ type ProjectConfig struct {
 	Strategy StackStrategy `json:"strategy,omitempty"`
 }
 
-// ProjectConfigPath returns <repo-root>/.pi/pr-agents.json, creating the .pi
-// directory. We keep the same path as the TypeScript implementation so a repo's
-// recorded strategy is shared across both tools.
+// ProjectConfigPath returns <repo-root>/.pr-agents.json. The file lives directly
+// at the repo root (not under a harness-specific dir like .pi) so the config is
+// harness-agnostic — pr-agents works with any agent harness (pi/claude/codex).
 func ProjectConfigPath(cwd string) (string, error) {
 	root, err := RepoRoot(cwd)
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(root, ".pi")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "pr-agents.json"), nil
+	return filepath.Join(root, ".pr-agents.json"), nil
 }
 
 // LoadProjectConfig reads the project config, returning a zero ProjectConfig

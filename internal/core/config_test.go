@@ -13,14 +13,12 @@ func TestProjectConfigPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(p) != "pr-agents.json" {
-		t.Errorf("base = %q, want pr-agents.json", filepath.Base(p))
+	// Harness-agnostic: directly at the repo root, not under .pi or similar.
+	if filepath.Base(p) != ".pr-agents.json" {
+		t.Errorf("base = %q, want .pr-agents.json", filepath.Base(p))
 	}
-	if filepath.Base(filepath.Dir(p)) != ".pi" {
-		t.Errorf("parent = %q, want .pi", filepath.Base(filepath.Dir(p)))
-	}
-	if _, err := os.Stat(filepath.Dir(p)); err != nil {
-		t.Errorf(".pi dir not created: %v", err)
+	if filepath.Dir(p) != dir {
+		t.Errorf("parent = %q, want repo root %q", filepath.Dir(p), dir)
 	}
 }
 

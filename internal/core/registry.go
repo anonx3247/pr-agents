@@ -64,13 +64,13 @@ type PrEntry struct {
 }
 
 // RegistryPath returns the shared registry path,
-// <git-common-dir>/pr-agents/registry.json, creating the parent dir.
+// <git-common-dir>/.pr-agents/registry.json, creating the parent dir.
 func RegistryPath(cwd string) (string, error) {
 	commonDir, err := GitCommonDir(cwd)
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(commonDir, "pr-agents")
+	dir := filepath.Join(commonDir, ".pr-agents")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
