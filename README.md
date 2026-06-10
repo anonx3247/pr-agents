@@ -7,9 +7,10 @@ pane**. Works with multiple agent harnesses (pi, claude, codex) and integrates
 with `asb`/`sx` for sandboxing and secrets, polling GitHub / Graphite for PR
 state, CI, and reviews.
 
-Status: early scaffolding. This PR lays the non-UI foundation — the Go module,
-core domain (registry, config, string/git/PR-state helpers) and CLI skeleton.
-Later PRs add the tmux layer, real CLI verbs, the daemon, and harness adapters.
+Status: early scaffolding. The Go module, core domain (registry, config,
+string/git/PR-state helpers), tmux layer, CLI verbs, harness adapters, and the
+per-session daemon are in place. Later PRs add the interactive `select` picker
+and the claude/codex adapters.
 
 ## Build & test
 
@@ -40,7 +41,7 @@ CI (`.github/workflows/ci.yml`) runs the gofmt check, `go vet ./...`,
 
 ```
 main.go                  Thin entrypoint → internal/cli.Run
-internal/cli/            Root command, stdlib-flag dispatch, version + stub verbs
+internal/cli/            Root command, stdlib-flag dispatch, CLI verbs (incl. daemon)
 internal/core/           Harness-agnostic pure logic:
   env.go                   PRA_* env-var contract + Depth()
   strings.go               Slugify, Shq, BuildEnv, CapTail, PaneTitle, WindowName
@@ -50,7 +51,37 @@ internal/core/           Harness-agnostic pure logic:
                            EntriesForSession, FindEntry)
   config.go                Per-project config (stacking strategy)
   prstate.go               Pure PR-state classification + diff parse helpers
+  review.go / ci.go        Pure review/CI selectors + task builders (daemon polls)
+  notify.go                Pure finished/cleanup notification builders
+internal/daemon/         Per-session background daemon:
+  daemon.go                Poll loop + GH/Tmuxer/Store interfaces (testable ticks)
+  poll.go                  PR-state / CI / review / finished tick logic
+  dock.go                  Dock auto-flip + layout maintenance
+  adapters.go              Real gh/tmux/registry adapters (IO)
 ```
+
+## The per-session daemon
+
+`pr-agents start` best-effort spawns one long-lived daemon per orchestrator
+session (`pr-agents daemon --session <id> --orchestrator-pane <paneId>`). It
+replaces in-process timers and drives ALL cross-agent messaging through
+`tmux send-keys`, so it is harness-agnostic. Each tick is wrapped so a
+gh/git/tmux failure never kills the loop, and the daemon exits cleanly when not
+inside tmux. It polls:
+
+- **PR state → orchestrator** — `gh pr view` per pushed PR; on a merge/close
+  transition it persists the status and tells the orchestrator to run
+  `pr-agents cleanup`.
+- **CI failures → worker** — new failing checks (deduped per head commit) hand
+  the worker a fix task on its own pane.
+- **Review comments → worker** — new inline comments/reviews/issue comments hand
+  the worker an address-and-reply task; replies go via `pr-agents reply-review`
+  (which never resolves the thread).
+- **Worker finished → orchestrator** — purely registry-driven via the result
+  recorded by `pr-agents report-result`.
+- **Dock auto-flip** — keeps the newest live PR pane docked right of the
+  orchestrator (opt out with `--no-dock`); the orchestrator pane is never
+  broken or killed.
 
 The CLI uses only the Go stdlib `flag` package plus a small hand-rolled
 subcommand dispatch — no third-party CLI framework — to keep dependencies
