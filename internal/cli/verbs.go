@@ -93,7 +93,7 @@ func runList(args []string, stdout, stderr io.Writer) int {
 
 // withEntry resolves ref against the session-scoped registry and invokes fn,
 // or prints the standard not-found error and returns exit code 1.
-func withEntry(ref string, stderr io.Writer, noun string, fn func(e core.PrEntry, stdout, stderr io.Writer) int, stdout io.Writer) int {
+func withEntry(ref string, stdout, stderr io.Writer, fn func(e core.PrEntry) int) int {
 	entries, _, _, err := sessionEntries()
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents: %v\n", err)
@@ -101,10 +101,10 @@ func withEntry(ref string, stderr io.Writer, noun string, fn func(e core.PrEntry
 	}
 	e := core.FindEntry(entries, ref)
 	if e == nil {
-		fmt.Fprintf(stderr, "No %s matching %q.\n", noun, ref)
+		fmt.Fprintf(stderr, "No PR agent matching %q.\n", ref)
 		return 1
 	}
-	return fn(*e, stdout, stderr)
+	return fn(*e)
 }
 
 func runPeek(args []string, stdout, stderr io.Writer) int {
@@ -119,7 +119,7 @@ func runPeek(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "pr-agents peek: usage: peek <id> [--lines N]")
 		return 2
 	}
-	return withEntry(rest[0], stderr, "PR agent", func(e core.PrEntry, stdout, stderr io.Writer) int {
+	return withEntry(rest[0], stdout, stderr, func(e core.PrEntry) int {
 		out, ok := tmux.CapturePane(e.PaneID, *lines)
 		if !ok {
 			fmt.Fprintln(stderr, "Pane no longer exists.")
@@ -127,7 +127,7 @@ func runPeek(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, out)
 		return 0
-	}, stdout)
+	})
 }
 
 func runSend(args []string, stdout, stderr io.Writer) int {
@@ -137,14 +137,14 @@ func runSend(args []string, stdout, stderr io.Writer) int {
 	}
 	ref := args[0]
 	message := strings.Join(args[1:], " ")
-	return withEntry(ref, stderr, "PR agent", func(e core.PrEntry, stdout, stderr io.Writer) int {
+	return withEntry(ref, stdout, stderr, func(e core.PrEntry) int {
 		if !tmux.SendToPane(e.PaneID, message) {
 			fmt.Fprintln(stderr, "Pane no longer exists.")
 			return 1
 		}
 		fmt.Fprintf(stdout, "Sent to %s (%s).\n", e.PrName, e.PaneID)
 		return 0
-	}, stdout)
+	})
 }
 
 func runStop(args []string, stdout, stderr io.Writer) int {
@@ -163,7 +163,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 	if *kill {
 		mode = tmux.StopKill
 	}
-	return withEntry(rest[0], stderr, "PR agent", func(e core.PrEntry, stdout, stderr io.Writer) int {
+	return withEntry(rest[0], stdout, stderr, func(e core.PrEntry) int {
 		if !tmux.StopPane(e.PaneID, mode) {
 			fmt.Fprintln(stderr, "Pane no longer exists.")
 			return 1
@@ -174,7 +174,7 @@ func runStop(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "%s %s (%s).\n", verb, e.PrName, e.PaneID)
 		return 0
-	}, stdout)
+	})
 }
 
 func runFocus(args []string, stdout, stderr io.Writer) int {
@@ -182,14 +182,14 @@ func runFocus(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "pr-agents focus: usage: focus <id>")
 		return 2
 	}
-	return withEntry(args[0], stderr, "PR agent", func(e core.PrEntry, stdout, stderr io.Writer) int {
+	return withEntry(args[0], stdout, stderr, func(e core.PrEntry) int {
 		if !tmux.Focus(e.PaneID) {
 			fmt.Fprintln(stderr, "Pane no longer exists.")
 			return 1
 		}
 		fmt.Fprintf(stdout, "Focused %s (%s).\n", e.PrName, e.PaneID)
 		return 0
-	}, stdout)
+	})
 }
 
 // contextOut is the JSON/human shape of the `context` verb output.
