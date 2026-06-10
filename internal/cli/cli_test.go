@@ -21,6 +21,11 @@ func TestRun(t *testing.T) {
 		{"stub select", []string{"select"}, 1, "", "not implemented"},
 		{"unknown command", []string{"bogus"}, 2, "", "unknown command"},
 		{"no command", nil, 2, "", "Usage: pr-agents"},
+		{"tool usage", []string{"tool"}, 2, "", "Usage: pr-agents tool"},
+		{"tool help", []string{"tool", "--help"}, 0, "Subcommands:", ""},
+		{"tool unknown sub", []string{"tool", "bogus"}, 2, "", "unknown subcommand"},
+		{"moved verb hint", []string{"context"}, 2, "", "moved to `pr-agents tool context`"},
+		{"moved set-pr-number hint", []string{"set-pr-number", "1"}, 2, "", "moved to `pr-agents tool set-pr-number`"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,10 +45,37 @@ func TestRun(t *testing.T) {
 }
 
 func TestEveryStubCommandIsRegistered(t *testing.T) {
-	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "context", "select", "daemon", "version", "start", "set-pr-number", "mark-pushed", "report-result", "reply-review"}
+	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "select", "daemon", "version", "start", "tool"}
 	for _, name := range want {
 		if _, ok := commands[name]; !ok {
 			t.Errorf("command %q not registered", name)
 		}
+	}
+}
+
+func TestWorkerPlumbingVerbsAreToolOnly(t *testing.T) {
+	moved := []string{"context", "set-pr-number", "mark-pushed", "report-result", "reply-review"}
+	for _, name := range moved {
+		if _, ok := commands[name]; ok {
+			t.Errorf("verb %q must not be registered top-level", name)
+		}
+		if _, ok := toolCommands[name]; !ok {
+			t.Errorf("verb %q not registered under tool", name)
+		}
+	}
+}
+
+func TestToolContextDispatches(t *testing.T) {
+	// `tool context` reaches runContext, which fails cleanly (exit 1) outside a
+	// worktree. The "pr-agents context:" prefix proves the route landed on
+	// runContext rather than the tool usage/unknown-subcommand paths.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"tool", "context"}, &out, &errOut); code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "pr-agents context:") {
+		t.Errorf("stderr = %q, want pr-agents context: prefix", errOut.String())
 	}
 }
