@@ -238,10 +238,9 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// Depth enforcement via cwd→registry: a worker recovers its own depth from
 	// its worktree path, with no env contract. A helper (depth 2) must refuse to
 	// dispatch further subagents.
-	ctxEntry := core.ResolveContextFromCwd(all, cwd)
 	depth := core.DepthFromCwd(all, cwd)
 	parentID := "root"
-	if ctxEntry != nil {
+	if ctxEntry := core.ResolveContextFromCwd(all, cwd); ctxEntry != nil {
 		parentID = ctxEntry.ID
 	}
 	if depth >= 2 {
