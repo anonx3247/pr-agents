@@ -122,6 +122,54 @@ func TestClaudeMetadata(t *testing.T) {
 	}
 }
 
+func TestCodexBuildArgs(t *testing.T) {
+	a, _ := Get("codex")
+	tests := []struct {
+		name string
+		spec LaunchSpec
+		want []string
+	}{
+		{
+			name: "full worker command (instructions via AGENTS.md, not argv)",
+			spec: LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"},
+			want: []string{"do the thing", "--full-auto"},
+		},
+		{
+			name: "no task (orchestrator) omits positional",
+			spec: LaunchSpec{InstructionsText: "ORCH"},
+			want: []string{"--full-auto"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// instructionsPath is ignored: Codex loads AGENTS.md from cwd.
+			got := a.BuildArgs(tt.spec, "/wt/AGENTS.md")
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("BuildArgs() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCodexMetadata(t *testing.T) {
+	a, err := Get("codex")
+	if err != nil {
+		t.Fatalf("Get(codex) error: %v", err)
+	}
+	if a.Kind() != "codex" {
+		t.Errorf("Kind() = %q, want codex", a.Kind())
+	}
+	if a.DefaultLauncher() != "codex" {
+		t.Errorf("DefaultLauncher() = %q, want codex", a.DefaultLauncher())
+	}
+	if a.InstructionMode() != InstructionFile {
+		t.Errorf("InstructionMode() = %q, want file", a.InstructionMode())
+	}
+	if a.InstructionFileName() != "AGENTS.md" {
+		t.Errorf("InstructionFileName() = %q, want AGENTS.md", a.InstructionFileName())
+	}
+}
+
 func TestInstructions(t *testing.T) {
 	tests := []struct {
 		role     Role
