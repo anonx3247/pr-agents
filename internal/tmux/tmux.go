@@ -113,6 +113,20 @@ func SetPaneTitleArgs(paneID, title string) []string {
 	return []string{"select-pane", "-t", paneID, "-T", title}
 }
 
+// JoinPaneArgs builds the argv for joining srcPane into targetPane's window as a
+// new pane to the RIGHT of target (`-h`). Used by the daemon to dock the active
+// PR-agent pane beside the orchestrator. Pure.
+func JoinPaneArgs(srcPane, targetPane string) []string {
+	return []string{"join-pane", "-h", "-s", srcPane, "-t", targetPane}
+}
+
+// BreakPaneArgs builds the argv for breaking srcPane back out into its OWN
+// background window (`-d`) named windowName. Used to undock a docked PR-agent
+// pane. Pure.
+func BreakPaneArgs(srcPane, windowName string) []string {
+	return []string{"break-pane", "-d", "-s", srcPane, "-n", windowName}
+}
+
 // OpenWindow launches command in its own background tmux window in cwd, labels
 // the pane with title, and returns the new pane id (works with `-t %paneId`
 // across windows). env is injected so the process inherits PRA_* in its pane.
@@ -210,6 +224,32 @@ func StopPane(paneID string, mode StopMode) bool {
 // SetPaneTitle labels a pane (best-effort).
 func SetPaneTitle(paneID, title string) {
 	TryTmux(SetPaneTitleArgs(paneID, title)...)
+}
+
+// JoinPane docks srcPane to the RIGHT of targetPane's window. Returns false on
+// any tmux failure (e.g. the source pane already gone). Best-effort.
+func JoinPane(srcPane, targetPane string) bool {
+	_, ok := TryTmux(JoinPaneArgs(srcPane, targetPane)...)
+	return ok
+}
+
+// BreakPane undocks srcPane back into its own hidden background window named
+// windowName. Best-effort.
+func BreakPane(srcPane, windowName string) bool {
+	_, ok := TryTmux(BreakPaneArgs(srcPane, windowName)...)
+	return ok
+}
+
+// SelectLayoutMainVertical re-tiles targetPane's window with the main-vertical
+// layout so the orchestrator stays dominant on the left. Best-effort.
+func SelectLayoutMainVertical(targetPane string) {
+	TryTmux("select-layout", "-t", targetPane, "main-vertical")
+}
+
+// SetMainPaneWidth sets the main-pane-width window option (e.g. "60%") for
+// targetPane's window. Best-effort.
+func SetMainPaneWidth(targetPane, width string) {
+	TryTmux("set-window-option", "-t", targetPane, "main-pane-width", width)
 }
 
 // Focus brings a pane full-screen by selecting its window and then the pane.
