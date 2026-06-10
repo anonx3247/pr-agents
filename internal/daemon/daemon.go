@@ -78,6 +78,13 @@ type Store interface {
 	Update(id string, patch func(*core.PrEntry))
 }
 
+// SessionResolver resolves the resumable session reference for a harness session
+// of the given kind running in cwd, considering only sessions created at or
+// after since. It returns ok=false when none has appeared yet (so the daemon
+// retries on a later tick). The daemon injects this so tests use a fake instead
+// of scanning the real "~" session stores.
+type SessionResolver func(kind, cwd string, since time.Time) (ref string, ok bool)
+
 // Daemon is the per-session poller. It holds the injected IO interfaces plus the
 // in-memory dedup state seeded from the registry on the first tick.
 type Daemon struct {
@@ -86,6 +93,10 @@ type Daemon struct {
 	tm    Tmuxer
 	store Store
 	cwd   string
+
+	// resolveSession resolves a worker's resumable session ref (injected so tests
+	// avoid the real session stores).
+	resolveSession SessionResolver
 
 	// In-memory dedup state across ticks.
 	lastState      map[string]core.PrStateClass
@@ -121,6 +132,7 @@ func New(cfg Config, gh GH, tm Tmuxer, store Store, cwd string) *Daemon {
 		tm:             tm,
 		store:          store,
 		cwd:            cwd,
+		resolveSession: realSessionResolver,
 		lastState:      map[string]core.PrStateClass{},
 		lastSeenResult: map[string]int{},
 		lastActivated:  map[string]string{},
@@ -188,9 +200,42 @@ func (d *Daemon) Run(stop <-chan struct{}, logw io.Writer) {
 	}
 }
 
-// tickFast runs the cheap, tmux-only maintenance: dock auto-flip and the
-// registry-driven worker-finished notification.
+// tickFast runs the cheap, local maintenance: dock auto-flip, the
+// registry-driven worker-finished notification, and resumable-session capture
+// (all tmux/registry/disk only, no network).
 func (d *Daemon) tickFast() {
 	d.maintainDock()
 	d.pollFinished()
+	d.captureSessions()
+}
+
+// captureSessions records each live worker's resumable session reference the
+// first time its harness session file appears on disk. It is idempotent (an
+// entry that already carries a ref is skipped by SelectSessionCaptureTargets),
+// bounded (a resolver miss simply retries on a later tick), and degrades
+// silently: an absent session store yields ok=false and the entry is left
+// untouched. The harness kind comes from the daemon's config and is persisted
+// alongside the ref so a later revive knows how to resume it.
+func (d *Daemon) captureSessions() {
+	for _, e := range core.SelectSessionCaptureTargets(d.entries(), d.tm.PaneAlive) {
+		ref, ok := d.resolveSession(d.cfg.Harness, e.Worktree, parseCreatedAt(e.CreatedAt))
+		if !ok {
+			continue
+		}
+		kind := d.cfg.Harness
+		d.store.Update(e.ID, func(p *core.PrEntry) {
+			p.WorkerSessionRef = ref
+			p.WorkerSessionHarness = kind
+		})
+	}
+}
+
+// parseCreatedAt parses an entry's RFC3339 CreatedAt into a since cutoff,
+// falling back to the zero time (accept any session file) on a parse error.
+func parseCreatedAt(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
