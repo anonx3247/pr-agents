@@ -132,6 +132,7 @@ func buildTaskMessage(name, branch, base string, mode core.Mode, task string, si
 		footer += " Before opening the PR, simplify your diff and commit it as a `refactor: simplify` commit."
 	}
 	footer += " When you open the PR, run `pr-agents set-pr-number <n>` and `pr-agents mark-pushed`."
+	footer += " As your FINAL step, run `pr-agents report-result \"<summary>\"` so the daemon notifies the orchestrator you finished."
 	lines = append(lines, footer)
 	return strings.Join(lines, "\n")
 }
