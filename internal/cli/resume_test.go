@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"reflect"
 	"sort"
 	"testing"
@@ -97,7 +98,7 @@ func TestReviveOneGuarded(t *testing.T) {
 
 	// build error → skipped.
 	deps := resumeDeps{
-		buildCommand: func(core.PrEntry) (string, error) { return "", errBuild },
+		buildCommand: func(core.PrEntry) (string, error) { return "", errors.New("build failed") },
 		spawnPane:    func(core.PrEntry, string) (string, error) { t.Fatal("spawn should not run"); return "", nil },
 		updatePaneID: func(string, string) { t.Fatal("update should not run") },
 		dock:         func(string) { t.Fatal("dock should not run") },
@@ -117,9 +118,3 @@ func TestReviveOneGuarded(t *testing.T) {
 		t.Error("reviveOne = true on spawn panic, want false")
 	}
 }
-
-var errBuild = &buildErr{}
-
-type buildErr struct{}
-
-func (*buildErr) Error() string { return "build failed" }
