@@ -163,7 +163,7 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 
 	// Best-effort: start the per-session daemon detached. Failure or a no-op
 	// (e.g. not inside tmux) must never block the orchestrator.
-	startDaemon(session, harnessKind, launcher, orchestratorPane())
+	startDaemon(session, harnessKind, orchestratorPane())
 
 	argv := buildOrchestratorArgv(launcher, adapter.BuildArgs(spec, instructionsPath), extra)
 	if len(argv) == 0 {
@@ -197,14 +197,17 @@ func orchestratorPane() string {
 }
 
 // startDaemon spawns `pr-agents daemon` detached, carrying the session id, the
-// orchestrator's pane id, and the harness/launcher contract. Best-effort: any
+// harness KIND (a selector for the session-capture store), and the
+// orchestrator's pane id. It deliberately does NOT forward the launcher prefix:
+// the daemon never spawns agents, so it has no use for a launch command and must
+// not become a shell-injection / privilege-escalation surface. Best-effort: any
 // error is swallowed and the daemon exits cleanly when there is nothing to do.
-func startDaemon(session, harnessKind, launcher, orchPane string) {
+func startDaemon(session, harnessKind, orchPane string) {
 	self, err := os.Executable()
 	if err != nil {
 		return
 	}
-	args := []string{"daemon", "--session", session, "--harness", harnessKind, "--launcher", launcher}
+	args := []string{"daemon", "--session", session, "--harness", harnessKind}
 	if orchPane != "" {
 		args = append(args, "--orchestrator-pane", orchPane)
 	}

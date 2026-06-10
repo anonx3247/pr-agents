@@ -28,14 +28,22 @@ const (
 )
 
 // Config holds the daemon's runtime configuration, supplied by the CLI verb.
+//
+// The daemon only READS gh/git state and sends tmux messages to EXISTING panes
+// — it never spawns agents. It therefore carries NO launcher (the spawn-command
+// prefix), which would otherwise be a shell-injection / privilege-escalation
+// surface; pane/process creation stays solely in `start`/`dispatch`.
 type Config struct {
 	Session          string
 	OrchestratorPane string
-	Harness          string
-	Launcher         string
-	GhInterval       time.Duration
-	ReviewInterval   time.Duration
-	NoDock           bool
+	// Harness is the fallback harness KIND ("pi"/"claude"/"codex"), used by the
+	// upstack session-capture step to pick which on-disk session store to scan.
+	// It is just a selector string, never an executed command — not a launch or
+	// privilege vector.
+	Harness        string
+	GhInterval     time.Duration
+	ReviewInterval time.Duration
+	NoDock         bool
 }
 
 // GH abstracts the gh/git reads the daemon performs, so the tick logic can be

@@ -23,8 +23,7 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	session := fs.String("session", os.Getenv(core.EnvSession), "Orchestrator session id to scope the registry")
 	orchPane := fs.String("orchestrator-pane", "", "The orchestrator's own tmux pane id (notifications target it)")
-	harnessKind := fs.String("harness", os.Getenv(core.EnvHarness), "Harness adapter (informational)")
-	launcher := fs.String("launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix (informational)")
+	harnessKind := fs.String("harness", os.Getenv(core.EnvHarness), "Fallback harness kind for session capture (selector, not a launch command)")
 	ghInterval := fs.Duration("gh-interval", daemon.DefaultGhInterval, "GitHub PR-state poll interval")
 	reviewInterval := fs.Duration("review-interval", daemon.DefaultReviewInterval, "Review/CI poll interval")
 	noDock := fs.Bool("no-dock", false, "Disable dock auto-flip / layout maintenance")
@@ -49,7 +48,6 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		Session:          *session,
 		OrchestratorPane: *orchPane,
 		Harness:          *harnessKind,
-		Launcher:         *launcher,
 		GhInterval:       *ghInterval,
 		ReviewInterval:   *reviewInterval,
 		NoDock:           *noDock,
