@@ -22,11 +22,11 @@ type command struct {
 	run     func(args []string, stdout, stderr io.Writer) int
 }
 
-// commands is the dispatch table. dispatch/select/daemon remain stubs until
-// later PRs implement them.
+// commands is the dispatch table. select/daemon remain stubs until later PRs
+// implement them.
 var commands = map[string]command{
 	"version":       {"Print the pr-agents version", runVersion},
-	"dispatch":      {"Create a worktree + branch + pane and hand off one PR", stub("dispatch")},
+	"dispatch":      {"Create a worktree + branch + pane and hand off one PR", runDispatch},
 	"list":          {"List PR agents with number/name/branch/status", runList},
 	"peek":          {"Read a PR agent's recent pane output", runPeek},
 	"send":          {"Send a message to a running PR agent", runSend},

@@ -116,10 +116,28 @@ func WorktreeListPorcelain(cwd string) string {
 	return out
 }
 
+// AddWorktree creates a new worktree at path on a new branch checked out from
+// base: `git worktree add -b <branch> <path> <base>`.
+func AddWorktree(cwd, branch, path, base string) error {
+	_, err := git(cwd, "worktree", "add", "-b", branch, path, base)
+	return err
+}
+
 // RemoveWorktree force-removes the worktree at path. Best-effort.
 func RemoveWorktree(cwd, path string) error {
 	_, err := git(cwd, "worktree", "remove", "--force", path)
 	return err
+}
+
+// GtTrack tells Graphite to track the current branch with the given parent,
+// run inside the worktree: `gt track --parent <parent>`. Best-effort: a missing
+// gt or a failure is returned so the caller can warn but continue.
+func GtTrack(worktreeDir, parent string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gt", "track", "--parent", parent)
+	cmd.Dir = worktreeDir
+	return cmd.Run()
 }
 
 // DeleteBranch force-deletes a local branch. Best-effort.
