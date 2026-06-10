@@ -116,6 +116,13 @@ func WorktreeListPorcelain(cwd string) string {
 	return out
 }
 
+// AddWorktree creates a new worktree at path on a new branch checked out from
+// base: `git worktree add -b <branch> <path> <base>`.
+func AddWorktree(cwd, branch, path, base string) error {
+	_, err := git(cwd, "worktree", "add", "-b", branch, path, base)
+	return err
+}
+
 // RemoveWorktree force-removes the worktree at path. Best-effort.
 func RemoveWorktree(cwd, path string) error {
 	_, err := git(cwd, "worktree", "remove", "--force", path)

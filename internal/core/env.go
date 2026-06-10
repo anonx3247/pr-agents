@@ -36,6 +36,10 @@ const (
 	EnvSimplify = "PRA_SIMPLIFY"
 	// EnvHarness selects the agent harness adapter (e.g. pi | claude | codex).
 	EnvHarness = "PRA_HARNESS"
+	// EnvLauncher is the launch-command PREFIX placed before the harness's own
+	// task + flags (e.g. "pi", or a sandbox wrapper like "isara codex run").
+	// pr-agents appends the adapter's BuildArgs transparently after it.
+	EnvLauncher = "PRA_LAUNCHER"
 )
 
 // Depth reads PRA_DEPTH from the environment and returns it as an int, falling
