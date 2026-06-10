@@ -68,6 +68,11 @@ the per-session daemon will steer you with a fresh task on your pane. Address it
 in code, run the gate, commit, and push. **Never disable or weaken checks to
 make CI pass.**
 
+To reply to a reviewer's inline comment, use your harness's reply tool
+(`reply_to_review_comment`) or `pr-agents reply-review <commentId> <body>` —
+**not** raw `gh`. These record your reply in the registry so the daemon does not
+re-surface your own reply as new feedback. Never resolve threads yourself.
+
 ## Report your result as the final step
 
 When you are done (PR opened, or you have nothing left to do this turn), record a
