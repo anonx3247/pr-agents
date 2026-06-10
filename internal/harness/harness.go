@@ -79,6 +79,11 @@ type Adapter interface {
 	// The exact ref shape is harness-specific (uuid for claude/codex, absolute
 	// session file path for pi).
 	SessionRef(cwd string, since time.Time) (ref string, ok bool)
+	// BuildResumeArgs returns the args appended AFTER the launcher prefix to
+	// RELAUNCH the harness resuming sessionRef in an interactive pane. There is
+	// no task seed and no instructions re-injection: a resumed session restores
+	// its own saved context. Pure (no IO), like BuildArgs.
+	BuildResumeArgs(spec LaunchSpec, sessionRef string) []string
 }
 
 // registry maps adapter kind → Adapter. Populated by each adapter's init.

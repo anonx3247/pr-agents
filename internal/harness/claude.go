@@ -79,3 +79,12 @@ func (claudeAdapter) SessionRef(cwd string, since time.Time) (string, bool) {
 	}
 	return strings.TrimSuffix(filepath.Base(path), ".jsonl"), true
 }
+
+// BuildResumeArgs relaunches Claude Code resuming sessionRef in an interactive
+// pane. Verified against `claude --help`: `-r, --resume [value]` resumes a
+// conversation by session id; --permission-mode acceptEdits keeps autonomous
+// edits in the worktree. No task positional and no --append-system-prompt: the
+// resumed conversation already carries its context. Pure: no IO.
+func (claudeAdapter) BuildResumeArgs(_ LaunchSpec, sessionRef string) []string {
+	return []string{"--resume", sessionRef, "--permission-mode", "acceptEdits"}
+}

@@ -136,3 +136,12 @@ func codexRolloutSessionID(path, cwd string) (string, bool) {
 	}
 	return meta.Payload.ID, true
 }
+
+// BuildResumeArgs relaunches Codex resuming sessionRef in an interactive pane.
+// Verified against `codex resume --help`: `codex resume [SESSION_ID] [PROMPT]`
+// resumes a previous interactive session by uuid. We pass only the session id
+// (no PROMPT seed) so the resumed session restores its own context. Note this
+// is the SUBCOMMAND form, unlike BuildArgs' bare-positional launch. Pure: no IO.
+func (codexAdapter) BuildResumeArgs(_ LaunchSpec, sessionRef string) []string {
+	return []string{"resume", sessionRef}
+}
