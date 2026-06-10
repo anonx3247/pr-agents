@@ -61,6 +61,15 @@ type PrEntry struct {
 	ResultSeq    *int   `json:"resultSeq,omitempty"`
 	// SeenReviewIds dedups review/CI items already surfaced (rc:/rv:/ic:/ci: keys).
 	SeenReviewIds []string `json:"seenReviewIds,omitempty"`
+	// WorkerSessionRef is the harness-specific resumable session reference
+	// (claude uuid / pi session-file path / codex session id) captured by the
+	// daemon once the worker's session file appears on disk. It is recorded once
+	// and used later to revive a dead pane by resuming its session.
+	WorkerSessionRef string `json:"workerSessionRef,omitempty"`
+	// WorkerSessionHarness records the harness kind (pi | claude | codex) needed
+	// to resume WorkerSessionRef, captured alongside the ref. PrEntry carries no
+	// other harness field, so this is the resume-time source of truth.
+	WorkerSessionHarness string `json:"workerSessionHarness,omitempty"`
 }
 
 // RegistryPath returns the shared registry path,

@@ -117,6 +117,23 @@ func PickWorkingAgent(
 	return best
 }
 
+// SelectSessionCaptureTargets returns the LIVE depth-1 worker entries whose
+// resumable WorkerSessionRef has not yet been captured, so the daemon can try to
+// resolve and persist it. Liveness is supplied via isAlive so the selection
+// stays pure and unit-testable. Entries that already carry a WorkerSessionRef,
+// pane-less or dead-pane entries, and helpers (depth != 1) are all skipped, so
+// the capture is idempotent and bounded to genuine workers still running.
+func SelectSessionCaptureTargets(entries []PrEntry, isAlive func(paneID string) bool) []PrEntry {
+	out := make([]PrEntry, 0)
+	for _, e := range entries {
+		if e.Depth != 1 || e.WorkerSessionRef != "" || e.PaneID == "" || !isAlive(e.PaneID) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // CleanupTarget pairs an entry selected for removal with the human-readable
 // reason it is being reaped.
 type CleanupTarget struct {
