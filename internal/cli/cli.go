@@ -25,17 +25,20 @@ type command struct {
 // commands is the dispatch table. dispatch/select/daemon remain stubs until
 // later PRs implement them.
 var commands = map[string]command{
-	"version":  {"Print the pr-agents version", runVersion},
-	"dispatch": {"Create a worktree + branch + pane and hand off one PR", stub("dispatch")},
-	"list":     {"List PR agents with number/name/branch/status", runList},
-	"peek":     {"Read a PR agent's recent pane output", runPeek},
-	"send":     {"Send a message to a running PR agent", runSend},
-	"stop":     {"Interrupt or kill a PR agent", runStop},
-	"focus":    {"Move tmux focus to a PR agent's pane", runFocus},
-	"cleanup":  {"Remove merged/closed PR worktrees", runCleanup},
-	"context":  {"Print the current PR identity resolved from the cwd", runContext},
-	"select":   {"Interactively select a PR agent", stub("select")},
-	"daemon":   {"Run the per-session background daemon", stub("daemon")},
+	"version":       {"Print the pr-agents version", runVersion},
+	"dispatch":      {"Create a worktree + branch + pane and hand off one PR", stub("dispatch")},
+	"list":          {"List PR agents with number/name/branch/status", runList},
+	"peek":          {"Read a PR agent's recent pane output", runPeek},
+	"send":          {"Send a message to a running PR agent", runSend},
+	"stop":          {"Interrupt or kill a PR agent", runStop},
+	"focus":         {"Move tmux focus to a PR agent's pane", runFocus},
+	"cleanup":       {"Remove merged/closed PR worktrees", runCleanup},
+	"context":       {"Print the current PR identity resolved from the cwd", runContext},
+	"set-pr-number": {"Record the PR number on the current worker's entry", runSetPrNumber},
+	"mark-pushed":   {"Mark the current worker's PR as pushed (starts polling)", runMarkPushed},
+	"report-result": {"Record the current worker's final result text", runReportResult},
+	"select":        {"Interactively select a PR agent", stub("select")},
+	"daemon":        {"Run the per-session background daemon", stub("daemon")},
 }
 
 // Run is the entrypoint invoked by main. It parses the root flags, resolves the
@@ -94,6 +97,6 @@ func usage(w io.Writer) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		fmt.Fprintf(w, "  %-9s %s\n", name, commands[name].summary)
+		fmt.Fprintf(w, "  %-14s %s\n", name, commands[name].summary)
 	}
 }
