@@ -156,34 +156,52 @@ func ParseWorktreePaths(porcelain string) []string {
 	return paths
 }
 
-// EnsureWorktreesIgnored appends ".worktrees/" to the repo's local
-// <git-common-dir>/info/exclude (not .gitignore, so it works in any repo and
-// stays uncommitted). Idempotent and best-effort: any error is returned but
-// callers may safely ignore it since keeping git status clean is non-critical.
-func EnsureWorktreesIgnored(root string) error {
-	commonDir, err := GitCommonDir(root)
+// AppendExcludeEntry returns the git exclude-file content with pattern ensured
+// present on its own line, plus whether it had to be added. Idempotent: if
+// pattern is already a line (ignoring surrounding whitespace), content is
+// returned unchanged with changed=false. A newline is inserted first when the
+// existing content does not already end with one. Pure (no IO) so the
+// exclusion logic can be unit-tested directly.
+func AppendExcludeEntry(content, pattern string) (string, bool) {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == pattern {
+			return content, false
+		}
+	}
+	prefix := ""
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		prefix = "\n"
+	}
+	return content + prefix + pattern + "\n", true
+}
+
+// EnsureExcluded appends pattern to the repo's local <git-common-dir>/info/
+// exclude (not .gitignore, so it works in any repo and stays uncommitted),
+// keeping the named file untracked without polluting the committed tree. Git
+// only honors the COMMON dir's info/exclude (per-worktree gitdir exclude files
+// are ignored), so a worktree shares this exclude with its parent repo — fine
+// here since info/exclude only affects untracked files. Idempotent and
+// best-effort: callers may ignore the error since a clean git status is
+// non-critical.
+func EnsureExcluded(cwd, pattern string) error {
+	commonDir, err := GitCommonDir(cwd)
 	if err != nil {
 		return err
 	}
 	excludePath := filepath.Join(commonDir, "info", "exclude")
 	current, _ := os.ReadFile(excludePath)
-	for _, line := range strings.Split(string(current), "\n") {
-		if strings.TrimSpace(line) == ".worktrees/" {
-			return nil
-		}
+	next, changed := AppendExcludeEntry(string(current), pattern)
+	if !changed {
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
 		return err
 	}
-	prefix := ""
-	if len(current) > 0 && !strings.HasSuffix(string(current), "\n") {
-		prefix = "\n"
-	}
-	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.WriteString(prefix + ".worktrees/\n")
-	return err
+	return os.WriteFile(excludePath, []byte(next), 0o644)
+}
+
+// EnsureWorktreesIgnored excludes ".worktrees/" from git status so dispatched
+// worktrees never show up as untracked. Thin wrapper over EnsureExcluded.
+func EnsureWorktreesIgnored(root string) error {
+	return EnsureExcluded(root, ".worktrees/")
 }

@@ -140,6 +140,53 @@ func TestEnsureWorktreesIgnored(t *testing.T) {
 	}
 }
 
+func TestAppendExcludeEntry(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		pattern     string
+		want        string
+		wantChanged bool
+	}{
+		{"empty file", "", "AGENTS.md", "AGENTS.md\n", true},
+		{"appends with trailing newline present", "node_modules/\n", "AGENTS.md", "node_modules/\nAGENTS.md\n", true},
+		{"inserts newline when missing", "node_modules/", "AGENTS.md", "node_modules/\nAGENTS.md\n", true},
+		{"idempotent: already present", "AGENTS.md\n", "AGENTS.md", "AGENTS.md\n", false},
+		{"idempotent: present with surrounding whitespace", "foo\n  AGENTS.md  \nbar\n", "AGENTS.md", "foo\n  AGENTS.md  \nbar\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := AppendExcludeEntry(tt.content, tt.pattern)
+			if got != tt.want || changed != tt.wantChanged {
+				t.Errorf("AppendExcludeEntry(%q, %q) = (%q, %v), want (%q, %v)",
+					tt.content, tt.pattern, got, changed, tt.want, tt.wantChanged)
+			}
+		})
+	}
+}
+
+func TestEnsureExcluded(t *testing.T) {
+	dir := initRepo(t)
+	common, err := GitCommonDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	excludePath := filepath.Join(common, "info", "exclude")
+
+	for i := 0; i < 2; i++ { // second pass proves idempotence
+		if err := EnsureExcluded(dir, "AGENTS.md"); err != nil {
+			t.Fatalf("pass %d: %v", i, err)
+		}
+	}
+	data, err := os.ReadFile(excludePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "AGENTS.md") != 1 {
+		t.Errorf("expected exactly one AGENTS.md entry, got: %q", data)
+	}
+}
+
 func TestDefaultBranch(t *testing.T) {
 	dir := initRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x"), 0o644); err != nil {

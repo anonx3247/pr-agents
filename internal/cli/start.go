@@ -152,6 +152,9 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 			fmt.Fprintf(stderr, "pr-agents start: writing instructions: %v\n", err)
 			return 1
 		}
+		// Keep the auto-loaded instruction file (e.g. AGENTS.md) untracked so the
+		// orchestrator never commits it. Best-effort.
+		core.EnsureExcluded(cwd, adapter.InstructionFileName())
 	} else {
 		spec.InstructionsText = instructions
 	}
