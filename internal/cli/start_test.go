@@ -38,9 +38,6 @@ func TestTmuxEnvFlags(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("tmuxEnvFlags = %#v, want %#v", got, want)
 	}
-	if tmuxEnvFlags(nil) == nil {
-		// nil map yields an empty (non-nil) slice; acceptable either way.
-	}
 }
 
 func TestBuildTmuxSessionArgs(t *testing.T) {

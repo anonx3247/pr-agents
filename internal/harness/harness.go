@@ -10,7 +10,11 @@
 // pr-agents itself never calls a sandbox tool.
 package harness
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // Role is the part an agent plays in the PR fleet. Instruction templates are
 // selected by role.
@@ -84,24 +88,12 @@ func Get(kind string) (Adapter, error) {
 	return nil, fmt.Errorf("unknown harness %q (known: %s)", kind, KnownKinds())
 }
 
-// KnownKinds returns the registered adapter kinds in sorted order.
+// KnownKinds returns the registered adapter kinds, sorted, comma-separated.
 func KnownKinds() string {
 	kinds := make([]string, 0, len(registry))
 	for k := range registry {
 		kinds = append(kinds, k)
 	}
-	// Small, stable set; insertion is rare so a simple sort is fine.
-	for i := 1; i < len(kinds); i++ {
-		for j := i; j > 0 && kinds[j-1] > kinds[j]; j-- {
-			kinds[j-1], kinds[j] = kinds[j], kinds[j-1]
-		}
-	}
-	out := ""
-	for i, k := range kinds {
-		if i > 0 {
-			out += ", "
-		}
-		out += k
-	}
-	return out
+	sort.Strings(kinds)
+	return strings.Join(kinds, ", ")
 }
