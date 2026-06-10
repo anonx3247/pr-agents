@@ -26,6 +26,7 @@ type command struct {
 // implement them.
 var commands = map[string]command{
 	"version":       {"Print the pr-agents version", runVersion},
+	"start":         {"Launch the orchestrator in a tmux session", runStart},
 	"dispatch":      {"Create a worktree + branch + pane and hand off one PR", runDispatch},
 	"list":          {"List PR agents with number/name/branch/status", runList},
 	"peek":          {"Read a PR agent's recent pane output", runPeek},

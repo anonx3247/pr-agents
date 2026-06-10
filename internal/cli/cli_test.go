@@ -40,7 +40,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestEveryStubCommandIsRegistered(t *testing.T) {
-	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "context", "select", "daemon", "version"}
+	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "context", "select", "daemon", "version", "start", "set-pr-number", "mark-pushed", "report-result"}
 	for _, name := range want {
 		if _, ok := commands[name]; !ok {
 			t.Errorf("command %q not registered", name)

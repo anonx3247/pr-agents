@@ -20,9 +20,14 @@ func (piAdapter) InstructionFileName() string { return "" }
 //
 // "-a" trusts project-local files for this run (a dispatched worktree of a repo
 // the user already chose to work in). The instructions are passed inline via
-// the flag, so instructionsPath is ignored. Pure: no IO.
+// the flag, so instructionsPath is ignored. An empty Task is omitted so the
+// orchestrator launches interactively (no seed message). Pure: no IO.
 func (piAdapter) BuildArgs(spec LaunchSpec, _ string) []string {
-	args := []string{spec.Task, "-a"}
+	args := []string{}
+	if spec.Task != "" {
+		args = append(args, spec.Task)
+	}
+	args = append(args, "-a")
 	if spec.InstructionsText != "" {
 		args = append(args, "--append-system-prompt", spec.InstructionsText)
 	}

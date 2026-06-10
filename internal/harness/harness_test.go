@@ -41,6 +41,11 @@ func TestPiBuildArgs(t *testing.T) {
 			spec: LaunchSpec{Task: "t", InstructionsText: "X"},
 			want: []string{"t", "-a", "--append-system-prompt", "X"},
 		},
+		{
+			name: "empty task (orchestrator) omits positional",
+			spec: LaunchSpec{InstructionsText: "ORCH"},
+			want: []string{"-a", "--append-system-prompt", "ORCH"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

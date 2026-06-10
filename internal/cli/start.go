@@ -1,0 +1,199 @@
+package cli
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
+
+	"github.com/anonx3247/pr-agents/internal/core"
+	"github.com/anonx3247/pr-agents/internal/harness"
+	"github.com/anonx3247/pr-agents/internal/tmux"
+)
+
+// execProcess replaces the current process image. A package var so tests can
+// stub it without actually exec'ing.
+var execProcess = syscall.Exec
+
+// tmuxEnvFlags renders an env map into sorted `-e KEY=VAL` tmux flags (used by
+// new-session so the session carries the PRA_* contract). Pure.
+func tmuxEnvFlags(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		out = append(out, "-e", k+"="+env[k])
+	}
+	return out
+}
+
+// buildTmuxSessionArgs builds the `tmux new-session` argv that re-execs command
+// inside a fresh, uniquely-named session carrying env. Pure.
+func buildTmuxSessionArgs(sessionName string, env map[string]string, command []string) []string {
+	args := []string{"new-session", "-s", sessionName}
+	args = append(args, tmuxEnvFlags(env)...)
+	return append(args, command...)
+}
+
+// buildOrchestratorArgv assembles the argv to exec the orchestrator harness in
+// the current pane: launcher tokens + adapter args + any extra passthrough
+// args. Pure.
+func buildOrchestratorArgv(launcher string, adapterArgs, extra []string) []string {
+	argv := strings.Fields(launcher)
+	argv = append(argv, adapterArgs...)
+	return append(argv, extra...)
+}
+
+// splitDoubleDash splits args at the first "--": before goes to flag parsing,
+// after is passthrough to the harness. When no "--" is present, all args are
+// flag args.
+func splitDoubleDash(args []string) (flags, extra []string) {
+	for i, a := range args {
+		if a == "--" {
+			return args[:i], args[i+1:]
+		}
+	}
+	return args, nil
+}
+
+func runStart(args []string, stdout, stderr io.Writer) int {
+	flagArgs, extra := splitDoubleDash(args)
+	fs := flag.NewFlagSet("start", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	harnessKind := fs.String("harness", os.Getenv(core.EnvHarness), "Harness adapter: pi|claude|codex")
+	launcher := fs.String("launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix before the harness args")
+	if err := fs.Parse(flagArgs); err != nil {
+		return 2
+	}
+	if *harnessKind == "" {
+		*harnessKind = "pi"
+	}
+	adapter, err := harness.Get(*harnessKind)
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
+		return 1
+	}
+	if *launcher == "" {
+		*launcher = adapter.DefaultLauncher()
+	}
+
+	// Stable session id: reuse PRA_SESSION when re-exec'd inside tmux, else mint
+	// a fresh one that survives into the tmux session via -e.
+	session := os.Getenv(core.EnvSession)
+	if session == "" {
+		session = genID()
+	}
+
+	if !tmux.InsideTmux() {
+		return startOutsideTmux(stderr, session, *harnessKind, *launcher)
+	}
+	return startInsideTmux(stdout, stderr, adapter, session, *harnessKind, *launcher, extra)
+}
+
+// startOutsideTmux creates a uniquely-named tmux session that re-execs this same
+// `pr-agents start` invocation inside it, carrying the PRA_* contract via -e.
+func startOutsideTmux(stderr io.Writer, session, harnessKind, launcher string) int {
+	tmuxBin, err := exec.LookPath("tmux")
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: tmux not found on PATH: %v\n", err)
+		return 1
+	}
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
+		return 1
+	}
+	// Re-exec the same invocation inside the session.
+	inner := append([]string{self}, os.Args[1:]...)
+	env := map[string]string{
+		core.EnvSession:  session,
+		core.EnvHarness:  harnessKind,
+		core.EnvLauncher: launcher,
+	}
+	argv := append([]string{"tmux"}, buildTmuxSessionArgs("pra-"+session, env, inner)...)
+	if err := execProcess(tmuxBin, argv, os.Environ()); err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: failed to launch tmux: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// startInsideTmux configures the session, installs the orchestrator
+// instructions, best-effort starts the daemon, and execs the orchestrator
+// harness in the current pane.
+func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session, harnessKind, launcher string, extra []string) int {
+	tmux.TmuxSetup()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
+		return 1
+	}
+
+	instructions, err := harness.Instructions(harness.RoleOrchestrator, harness.InstructionData{})
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
+		return 1
+	}
+
+	spec := harness.LaunchSpec{Worktree: cwd}
+	instructionsPath := ""
+	if adapter.InstructionMode() == harness.InstructionFile {
+		instructionsPath = filepath.Join(cwd, adapter.InstructionFileName())
+		if err := os.WriteFile(instructionsPath, []byte(instructions), 0o644); err != nil {
+			fmt.Fprintf(stderr, "pr-agents start: writing instructions: %v\n", err)
+			return 1
+		}
+	} else {
+		spec.InstructionsText = instructions
+	}
+
+	// Carry the PRA_* contract to the orchestrator process so dispatch reads it.
+	os.Setenv(core.EnvSession, session)
+	os.Setenv(core.EnvHarness, harnessKind)
+	os.Setenv(core.EnvLauncher, launcher)
+
+	// Best-effort: start the per-session daemon detached. It is a stub until a
+	// later PR; failure or a no-op must not block the orchestrator.
+	startDaemon()
+
+	argv := buildOrchestratorArgv(launcher, adapter.BuildArgs(spec, instructionsPath), extra)
+	if len(argv) == 0 {
+		fmt.Fprintln(stderr, "pr-agents start: empty launch command")
+		return 1
+	}
+	bin, err := exec.LookPath(argv[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: launcher %q not found: %v\n", argv[0], err)
+		return 1
+	}
+	if err := execProcess(bin, argv, os.Environ()); err != nil {
+		fmt.Fprintf(stderr, "pr-agents start: failed to launch orchestrator: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// startDaemon spawns `pr-agents daemon` detached, swallowing any error (the
+// daemon is a stub until a later PR).
+func startDaemon() {
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(self, "daemon")
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	_ = cmd.Start()
+	if cmd.Process != nil {
+		_ = cmd.Process.Release()
+	}
+}
