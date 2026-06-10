@@ -18,7 +18,7 @@ func TestRun(t *testing.T) {
 		{"version command", []string{"version"}, 0, "pr-agents " + Version, ""},
 		{"list", []string{"list"}, 0, "No PR agents.", ""},
 		{"dispatch needs name", []string{"dispatch"}, 2, "", "--name is required"},
-		{"stub daemon", []string{"daemon"}, 1, "", "not implemented"},
+		{"stub select", []string{"select"}, 1, "", "not implemented"},
 		{"unknown command", []string{"bogus"}, 2, "", "unknown command"},
 		{"no command", nil, 2, "", "Usage: pr-agents"},
 	}
@@ -40,7 +40,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestEveryStubCommandIsRegistered(t *testing.T) {
-	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "context", "select", "daemon", "version", "start", "set-pr-number", "mark-pushed", "report-result"}
+	want := []string{"dispatch", "list", "peek", "send", "stop", "focus", "cleanup", "context", "select", "daemon", "version", "start", "set-pr-number", "mark-pushed", "report-result", "reply-review"}
 	for _, name := range want {
 		if _, ok := commands[name]; !ok {
 			t.Errorf("command %q not registered", name)

@@ -99,3 +99,19 @@ func TestEnvArgs(t *testing.T) {
 		t.Errorf("envArgs() = %v, want %v", got, want)
 	}
 }
+
+func TestJoinPaneArgs(t *testing.T) {
+	got := JoinPaneArgs("%5", "%1")
+	want := []string{"join-pane", "-h", "-s", "%5", "-t", "%1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("JoinPaneArgs = %#v, want %#v", got, want)
+	}
+}
+
+func TestBreakPaneArgs(t *testing.T) {
+	got := BreakPaneArgs("%5", "pr12-foo")
+	want := []string{"break-pane", "-d", "-s", "%5", "-n", "pr12-foo"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("BreakPaneArgs = %#v, want %#v", got, want)
+	}
+}

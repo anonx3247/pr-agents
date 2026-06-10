@@ -156,6 +156,7 @@ func TestBuildTaskMessage(t *testing.T) {
 		"refactor: simplify",
 		"pr-agents set-pr-number",
 		"pr-agents mark-pushed",
+		"pr-agents report-result",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("task message missing %q", want)
