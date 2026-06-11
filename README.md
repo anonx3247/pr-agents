@@ -181,6 +181,15 @@ filter environment variables across the launch boundary, workers resolve their
 identity from `cwd → registry` (`pr-agents tool context`) rather than from env,
 so a launcher wrapper can stay trivial.
 
+A sandbox also strips `$TMUX`, so a sandboxed `pr-agents dispatch` cannot find
+the tmux server. pr-agents re-derives the tmux **socket** the same way it carries
+the session/harness/launcher: `start` (outside the sandbox) extracts it from the
+real `$TMUX`, persists it on the session record, and templates `--tmux-socket` into
+the dispatch command; `dispatch` then talks to the server with `tmux -S <socket>`.
+Note the sandbox **profile must also expose the tmux server socket directory**
+(typically `/tmp/tmux-<uid>/`) to the sandboxed process, or the client still
+cannot reach the server.
+
 See [docs/sandboxed-launchers.md](docs/sandboxed-launchers.md) for the full
 model, per-harness instruction-injection notes, and copy-paste examples
 (ready-made wrappers live in [`examples/launchers/`](examples/launchers/)).
