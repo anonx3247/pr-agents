@@ -156,20 +156,26 @@ func TestResolveScopeID(t *testing.T) {
 		name     string
 		resolver ScopeRefResolver
 		env      string
+		fresh    bool
 		want     string
 	}{
-		{"harness ref wins over env", ref("REF", true), "ENV", "REF"},
-		{"ref trimmed", ref("  REF ", true), "ENV", "REF"},
-		{"blank ref falls through to env", ref("   ", true), "ENV", "ENV"},
-		{"ref ok=false falls through to env", ref("REF", false), "ENV", "ENV"},
-		{"nil resolver uses env", nil, "ENV", "ENV"},
-		{"env trimmed", ref("", false), "  ENV  ", "ENV"},
-		{"no ref no env uses fallback", ref("", false), "", "RANDOM"},
-		{"nil resolver empty env uses fallback", nil, "", "RANDOM"},
+		{"harness ref wins over env", ref("REF", true), "ENV", false, "REF"},
+		{"ref trimmed", ref("  REF ", true), "ENV", false, "REF"},
+		{"blank ref falls through to env", ref("   ", true), "ENV", false, "ENV"},
+		{"ref ok=false falls through to env", ref("REF", false), "ENV", false, "ENV"},
+		{"nil resolver uses env", nil, "ENV", false, "ENV"},
+		{"env trimmed", ref("", false), "  ENV  ", false, "ENV"},
+		{"no ref no env uses fallback", ref("", false), "", false, "RANDOM"},
+		{"nil resolver empty env uses fallback", nil, "", false, "RANDOM"},
+		// fresh=true bypasses ref + env entirely and always mints via fallback.
+		{"fresh ignores winning ref", ref("REF", true), "ENV", true, "RANDOM"},
+		{"fresh ignores env", ref("", false), "ENV", true, "RANDOM"},
+		{"fresh with nil resolver", nil, "ENV", true, "RANDOM"},
+		{"fresh with no ref no env", ref("", false), "", true, "RANDOM"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ResolveScopeID(tt.resolver, tt.env, fallback); got != tt.want {
+			if got := ResolveScopeID(tt.resolver, tt.env, fallback, tt.fresh); got != tt.want {
 				t.Errorf("ResolveScopeID = %q, want %q", got, tt.want)
 			}
 		})

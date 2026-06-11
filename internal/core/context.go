@@ -80,7 +80,14 @@ type ScopeRefResolver func() (ref string, ok bool)
 //     entries; a genuinely fresh session yields a new ref and a new scope.
 //  2. the PRA_SESSION env var (carried across a tmux re-exec / nested process).
 //  3. a random fallback for a first-ever start with no session on disk yet.
-func ResolveScopeID(resolveRef ScopeRefResolver, env string, fallback func() string) string {
+//
+// When fresh is true the stable-derivation steps (ref + env) are SKIPPED and the
+// fallback is always used, so the caller mints a brand-new scope id that adopts
+// no prior registry entries (the `--fresh` flag).
+func ResolveScopeID(resolveRef ScopeRefResolver, env string, fallback func() string, fresh bool) string {
+	if fresh {
+		return fallback()
+	}
 	if resolveRef != nil {
 		if ref, ok := resolveRef(); ok {
 			if r := strings.TrimSpace(ref); r != "" {
