@@ -58,7 +58,7 @@ internal/harness/        Harness adapters behind a single Adapter interface:
   instructions.go          Role instruction templates (orchestrator/worker/helper)
   pi.go                    pi adapter (flag-based --append-system-prompt)
   claude.go                claude (Claude Code) adapter (flag-based
-                           --append-system-prompt, --permission-mode acceptEdits)
+                           --append-system-prompt, --dangerously-skip-permissions)
 internal/daemon/         Per-session background daemon:
   daemon.go                Poll loop + GH/Tmuxer/Store interfaces (testable ticks)
   poll.go                  PR-state / CI / review / finished tick logic

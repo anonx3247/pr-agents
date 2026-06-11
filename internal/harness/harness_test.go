@@ -80,17 +80,17 @@ func TestClaudeBuildArgs(t *testing.T) {
 		{
 			name: "full worker command",
 			spec: LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"},
-			want: []string{"do the thing", "--append-system-prompt", "INSTR", "--permission-mode", "acceptEdits"},
+			want: []string{"do the thing", "--append-system-prompt", "INSTR", "--dangerously-skip-permissions"},
 		},
 		{
 			name: "no instructions",
 			spec: LaunchSpec{Task: "t"},
-			want: []string{"t", "--permission-mode", "acceptEdits"},
+			want: []string{"t", "--dangerously-skip-permissions"},
 		},
 		{
 			name: "empty task (orchestrator) omits positional",
 			spec: LaunchSpec{InstructionsText: "ORCH"},
-			want: []string{"--append-system-prompt", "ORCH", "--permission-mode", "acceptEdits"},
+			want: []string{"--append-system-prompt", "ORCH", "--dangerously-skip-permissions"},
 		},
 	}
 	for _, tt := range tests {
