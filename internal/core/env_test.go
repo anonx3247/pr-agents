@@ -40,6 +40,7 @@ func TestDepthReadsEnv(t *testing.T) {
 func TestEnvConstantsArePrefixed(t *testing.T) {
 	for _, name := range []string{
 		EnvDepth, EnvSession, EnvID, EnvMode, EnvBase, EnvBranch, EnvName, EnvSimplify, EnvHarness,
+		EnvLauncher,
 	} {
 		if len(name) < 5 || name[:4] != "PRA_" {
 			t.Errorf("env constant %q is not PRA_-prefixed", name)

@@ -9,8 +9,8 @@ state, CI, and reviews.
 
 Status: early scaffolding. The Go module, core domain (registry, config,
 string/git/PR-state helpers), tmux layer, CLI verbs, harness adapters, and the
-per-session daemon are in place, with the pi and claude harness adapters. Later
-PRs add the interactive `select` picker and the codex adapter.
+per-session daemon are in place, with the pi, claude, and codex harness
+adapters. Later PRs add the interactive `select` picker.
 
 ## Build & test
 
@@ -46,7 +46,7 @@ internal/core/           Harness-agnostic pure logic:
   env.go                   PRA_* env-var contract + Depth()
   strings.go               Slugify, Shq, BuildEnv, CapTail, PaneTitle, WindowName
   git.go                   RepoRoot, GitCommonDir, DefaultBranch, UniqueBranch,
-                           WorktreesDirFrom, EnsureWorktreesIgnored
+                           WorktreesDirFrom, AppendExcludeEntry/EnsureExcluded
   registry.go              PrEntry + shared registry (atomic load/save, UpdateEntry,
                            EntriesForSession, FindEntry)
   config.go                Per-project config (stacking strategy)
@@ -59,6 +59,10 @@ internal/harness/        Harness adapters behind a single Adapter interface:
   pi.go                    pi adapter (flag-based --append-system-prompt)
   claude.go                claude (Claude Code) adapter (flag-based
                            --append-system-prompt, --dangerously-skip-permissions)
+  codex.go                 codex (Codex CLI) adapter (file-based: instructions
+                           injected via an auto-loaded AGENTS.md; subagents run
+                           fully autonomously via
+                           --dangerously-bypass-approvals-and-sandbox)
 internal/daemon/         Per-session background daemon:
   daemon.go                Poll loop + GH/Tmuxer/Store interfaces (testable ticks)
   poll.go                  PR-state / CI / review / finished tick logic

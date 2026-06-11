@@ -286,6 +286,9 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pr-agents dispatch: writing instructions: %v\n", err)
 			return 1
 		}
+		// Keep the auto-loaded instruction file (e.g. AGENTS.md) untracked so the
+		// worker never commits it into the PR diff. Best-effort.
+		core.EnsureExcluded(worktree, adapter.InstructionFileName())
 	} else {
 		spec.InstructionsText = instructions
 	}
