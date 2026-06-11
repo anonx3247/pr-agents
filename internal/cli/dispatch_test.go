@@ -310,3 +310,22 @@ func TestResolveDispatchSession(t *testing.T) {
 		t.Errorf("empty flag should use fallback: got %q want S_fallback", got)
 	}
 }
+
+func TestResolveTmuxSocket(t *testing.T) {
+	cases := []struct {
+		name, flag, tmuxEnv, record, want string
+	}{
+		{"flag wins over all", "/sock/flag", "/sock/env,1,0", "/sock/rec", "/sock/flag"},
+		{"env-derived when no flag", "", "/sock/env,1,0", "/sock/rec", "/sock/env"},
+		{"record when flag+env stripped (sandbox)", "", "", "/sock/rec", "/sock/rec"},
+		{"all empty -> no server", "", "", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveTmuxSocket(c.flag, c.tmuxEnv, c.record); got != c.want {
+				t.Errorf("resolveTmuxSocket(%q,%q,%q) = %q, want %q",
+					c.flag, c.tmuxEnv, c.record, got, c.want)
+			}
+		})
+	}
+}

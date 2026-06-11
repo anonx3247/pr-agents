@@ -1,9 +1,40 @@
 package tmux
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
+
+func TestSocketArgs(t *testing.T) {
+	base := []string{"new-window", "-d"}
+	if got := socketArgs("", base); !reflect.DeepEqual(got, base) {
+		t.Errorf("socketArgs(\"\") = %v, want unchanged %v", got, base)
+	}
+	got := socketArgs("/tmp/tmux-501/default", base)
+	want := []string{"-S", "/tmp/tmux-501/default", "new-window", "-d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("socketArgs = %v, want %v", got, want)
+	}
+}
+
+func TestSetSocketAndInsideTmux(t *testing.T) {
+	t.Setenv("TMUX", "")
+	os.Unsetenv("TMUX")
+	defer SetSocket("")
+
+	SetSocket("")
+	if InsideTmux() {
+		t.Errorf("InsideTmux() = true with no $TMUX and no socket, want false")
+	}
+	SetSocket("/tmp/tmux-501/default")
+	if Socket() != "/tmp/tmux-501/default" {
+		t.Errorf("Socket() = %q, want configured path", Socket())
+	}
+	if !InsideTmux() {
+		t.Errorf("InsideTmux() = false with a configured socket, want true")
+	}
+}
 
 func TestOpenWindowArgs(t *testing.T) {
 	tests := []struct {

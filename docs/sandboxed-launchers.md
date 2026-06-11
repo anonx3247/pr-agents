@@ -110,7 +110,7 @@ and it templates the concrete dispatch command into the orchestrator's role
 instructions (via `harness.Instructions` → `InstructionData`):
 
 ```
-pr-agents dispatch --session <session> --harness <harness> --launcher "<launcher>" \
+pr-agents dispatch --session <session> --harness <harness> --launcher "<launcher>" --tmux-socket "<socket>" \
   --name "..." --task "..." [--mode ...] [--simplify]
 ```
 
@@ -135,6 +135,41 @@ mounted repo exactly like the registry:
 
 The env vars are still written (they help the non-sandboxed path); the argv flags
 are the primary channel and the records are the durable fallback.
+
+### The tmux socket is carried the same way
+
+`$TMUX` is one of the env vars a sandbox strips. tmux sets it to a triple
+`<socket>,<pid>,<session>` for every pane, and pr-agents talks to the tmux server
+through it. When the orchestrator runs under an env-stripping launcher, a
+sandboxed `pr-agents dispatch` sees no `$TMUX`, so it would (a) trip the
+`InsideTmux()` guard and hard-fail with *"not inside tmux; run `pr-agents start`
+first"*, and (b) even past that, every `tmux` call could not find the server (no
+`$TMUX`, no `-S <socket>`). This is the SAME class of bug as the session/harness/
+launcher case above: env does not cross the boundary, so identity must ride on
+argv/instructions + the on-disk record, which do.
+
+The fix re-derives the tmux **server socket** the same way:
+
+- Running OUTSIDE the sandbox, `start` extracts the socket from the real `$TMUX`
+  (the substring before the first comma, `core.TmuxSocketFromEnv`), persists it on
+  the `sessions.json` record, AND templates `--tmux-socket "<socket>"` into the
+  orchestrator's dispatch command alongside `--session/--harness/--launcher`.
+- `dispatch` resolves the socket with precedence **`--tmux-socket` flag >
+  `$TMUX`-derived socket > on-disk record > ""**, configures the tmux layer with
+  it (`tmux.SetSocket`), and proceeds whenever a socket is resolvable — only
+  failing when NO channel yields one. Every tmux invocation is then prefixed with
+  the global `-S <socket>` flag so the new worker window lands on the SAME server.
+
+> **Caveat — the sandbox profile must expose the tmux socket.** Carrying the
+> socket *path* is necessary but not sufficient: the sandboxed process must also
+> be able to *reach* the unix socket on disk. tmux server sockets live in
+> `/tmp/tmux-<uid>/` (e.g. `/tmp/tmux-501/default`), and a sandbox that walls off
+> `/tmp` will block the client even though it knows the path — exactly analogous
+> to codex needing the worktree writable. **Your sandbox profile MUST grant the
+> sandboxed process access to the tmux server socket directory (typically
+> `/tmp/tmux-<uid>/`)**, or dispatch resolves the socket but still cannot talk to
+> the server. Check `echo $TMUX` outside the sandbox to see the exact socket path
+> to allow.
 
 The practical consequence for a launcher wrapper: it can be trivial. It does not
 need to thread any pr-agents state through the sandbox. It only has to run the

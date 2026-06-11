@@ -8,7 +8,7 @@ import (
 
 func TestSessionRecordRoundTrip(t *testing.T) {
 	dir := initRepo(t)
-	rec := SessionRecord{Harness: "claude", Launcher: "isara claude run"}
+	rec := SessionRecord{Harness: "claude", Launcher: "isara claude run", TmuxSocket: "/tmp/tmux-501/default"}
 	if err := SaveSessionRecord(dir, "sess1", rec); err != nil {
 		t.Fatalf("SaveSessionRecord: %v", err)
 	}
@@ -137,6 +137,25 @@ func TestSaveCurrentSessionEmptyNoOp(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err == nil {
 		t.Errorf("expected no marker file for empty id")
+	}
+}
+
+func TestTmuxSocketFromEnv(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"empty", "", ""},
+		{"full triple", "/private/tmp/tmux-501/default,68473,31", "/private/tmp/tmux-501/default"},
+		{"socket only, no comma", "/tmp/tmux-501/default", "/tmp/tmux-501/default"},
+		{"leading comma is malformed", ",68473,31", ""},
+		{"socket with one trailing field", "/tmp/sock,123", "/tmp/sock"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := TmuxSocketFromEnv(c.in); got != c.want {
+				t.Errorf("TmuxSocketFromEnv(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 

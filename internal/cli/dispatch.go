@@ -18,16 +18,17 @@ import (
 
 // dispatchOpts holds the parsed dispatch flags.
 type dispatchOpts struct {
-	name     string
-	task     string
-	mode     string
-	base     string
-	stackOn  string
-	branch   string
-	simplify bool
-	harness  string
-	launcher string
-	session  string
+	name       string
+	task       string
+	mode       string
+	base       string
+	stackOn    string
+	branch     string
+	simplify   bool
+	harness    string
+	launcher   string
+	session    string
+	tmuxSocket string
 }
 
 // dispatchPlan is the resolved branch/base/mode for a dispatch, computed purely
@@ -164,6 +165,16 @@ func resolveDispatchSession(flagSession string, fallback func() string) string {
 	return fallback()
 }
 
+// resolveTmuxSocket picks the tmux server socket with precedence: the explicit
+// --tmux-socket flag (templated into the orchestrator instructions by `start`,
+// which carries it across the sandbox boundary via argv) > the socket derived
+// from the live $TMUX (non-sandboxed path) > the persisted session record (the
+// disk channel that survives a sandbox that stripped $TMUX) > "". Returning ""
+// means no server is reachable by any channel. Pure given the env value.
+func resolveTmuxSocket(flagSocket, tmuxEnv, recordSocket string) string {
+	return core.ResolveFromSources(flagSocket, core.TmuxSocketFromEnv(tmuxEnv), recordSocket)
+}
+
 // resolveHarnessLauncher applies the dispatch precedence — explicit flag > env >
 // persisted session record > final fallback — to the harness kind and launcher
 // prefix, returning the chosen adapter. The harness falls back to "pi" and the
@@ -233,6 +244,10 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// `start` always pass it; precedence is --session flag > PRA_SESSION env >
 	// cwd-derived fallback.
 	fs.StringVar(&o.session, "session", "", "Orchestrator session id that owns this entry")
+	// --tmux-socket carries the orchestrator's tmux server socket across the
+	// sandbox boundary (env, including $TMUX, is stripped). Precedence is
+	// --tmux-socket flag > $TMUX-derived socket > on-disk session record > "".
+	fs.StringVar(&o.tmuxSocket, "tmux-socket", "", "tmux server socket path (recovers the server when $TMUX is stripped)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -253,11 +268,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "pr-agents dispatch: --task or --task-file is required")
 		return 2
 	}
-	if !tmux.InsideTmux() {
-		fmt.Fprintln(stderr, "pr-agents dispatch: not inside tmux; run `pr-agents start` first")
-		return 1
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
@@ -277,6 +287,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// workers AND escape the sandbox via the bare default launcher.
 	session := resolveDispatchSession(o.session, func() string { return resolveSession(all, cwd) })
 	rec := core.SessionRecordFor(cwd, session)
+
+	// Resolve the tmux server socket (flag > $TMUX > record > "") and configure the
+	// tmux layer so every call targets the orchestrator's server. A sandbox
+	// launcher strips $TMUX, so without this a sandboxed dispatch cannot locate the
+	// server. Only fail when NO channel yields a socket AND we are not inside tmux.
+	tmux.SetSocket(resolveTmuxSocket(o.tmuxSocket, os.Getenv("TMUX"), rec.TmuxSocket))
+	if !tmux.InsideTmux() {
+		fmt.Fprintln(stderr, "pr-agents dispatch: not inside tmux and no tmux socket resolvable; run `pr-agents start` first")
+		return 1
+	}
 	var adapter harness.Adapter
 	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(
 		o.harness, o.launcher, os.Getenv(core.EnvHarness), os.Getenv(core.EnvLauncher), rec)

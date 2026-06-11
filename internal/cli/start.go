@@ -195,10 +195,16 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	// into its instructions so it dispatches with explicit flags. This process
 	// runs OUTSIDE the sandbox and knows the REAL values; the rendered text/argv
 	// crosses the sandbox boundary (env vars do not).
+	// Capture the tmux server socket from the REAL $TMUX (this process runs inside
+	// tmux, OUTSIDE the sandbox). A sandbox launcher strips $TMUX, so the socket is
+	// carried to the sandboxed dispatch via the templated --tmux-socket flag and
+	// the on-disk session record — both cross the sandbox boundary.
+	tmuxSocket := core.TmuxSocketFromEnv(os.Getenv("TMUX"))
 	instructions, err := harness.Instructions(harness.RoleOrchestrator, harness.InstructionData{
-		Session:  session,
-		Harness:  harnessKind,
-		Launcher: launcher,
+		Session:    session,
+		Harness:    harnessKind,
+		Launcher:   launcher,
+		TmuxSocket: tmuxSocket,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
@@ -225,7 +231,7 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	// non-sandboxed path, but a sandbox launcher strips them before the
 	// orchestrator shells out to dispatch; the on-disk record (which crosses the
 	// sandbox boundary via the mounted repo) is the durable fallback. Best-effort.
-	_ = core.SaveSessionRecord(cwd, session, core.SessionRecord{Harness: harnessKind, Launcher: launcher})
+	_ = core.SaveSessionRecord(cwd, session, core.SessionRecord{Harness: harnessKind, Launcher: launcher, TmuxSocket: tmuxSocket})
 	// And a cwd-discoverable marker of the REAL session id so env-less verbs
 	// (list/resume/cleanup) the sandboxed orchestrator runs resolve this exact
 	// scope rather than a harness-ref re-derivation that misses stripped env.

@@ -255,9 +255,10 @@ func TestInstructionsWorkerInterpolation(t *testing.T) {
 
 func TestInstructionsOrchestratorIdentity(t *testing.T) {
 	out, err := Instructions(RoleOrchestrator, InstructionData{
-		Session:  "S_real",
-		Harness:  "claude",
-		Launcher: "isara claude run",
+		Session:    "S_real",
+		Harness:    "claude",
+		Launcher:   "isara claude run",
+		TmuxSocket: "/tmp/tmux-501/default",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +266,7 @@ func TestInstructionsOrchestratorIdentity(t *testing.T) {
 	if strings.Contains(out, "{{") {
 		t.Errorf("template not fully rendered: %q", out)
 	}
-	want := `pr-agents dispatch --session S_real --harness claude --launcher "isara claude run"`
+	want := `pr-agents dispatch --session S_real --harness claude --launcher "isara claude run" --tmux-socket "/tmp/tmux-501/default"`
 	if !strings.Contains(out, want) {
 		t.Errorf("orchestrator instructions missing templated dispatch command %q\n--- got ---\n%s", want, out)
 	}
