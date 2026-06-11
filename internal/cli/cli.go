@@ -24,8 +24,7 @@ type command struct {
 
 // commands is the top-level dispatch table: human- and orchestrator-facing
 // orchestration/inspection verbs. The worker-plumbing verbs live under the
-// `tool` parent command (see toolCommands). select remains a stub until a later
-// PR implements the interactive picker.
+// `tool` parent command (see toolCommands).
 var commands = map[string]command{
 	"version":  {"Print the pr-agents version", runVersion},
 	"start":    {"Launch the orchestrator in a tmux session", runStart},
@@ -37,7 +36,7 @@ var commands = map[string]command{
 	"stop":     {"Interrupt or kill a PR agent", runStop},
 	"focus":    {"Move tmux focus to a PR agent's pane", runFocus},
 	"cleanup":  {"Remove merged/closed PR worktrees", runCleanup},
-	"select":   {"Interactively select a PR agent", stub("select")},
+	"select":   {"Interactively select a PR agent's pane to focus", runSelect},
 	"daemon":   {"Run the per-session background daemon", runDaemon},
 	"tool":     {"Worker-plumbing subcommands (agent-only)", runTool},
 }
@@ -112,14 +111,6 @@ func runTool(args []string, stdout, stderr io.Writer) int {
 func runVersion(_ []string, stdout, _ io.Writer) int {
 	fmt.Fprintf(stdout, "pr-agents %s\n", Version)
 	return 0
-}
-
-// stub returns a run function that reports the command is not yet implemented.
-func stub(name string) func([]string, io.Writer, io.Writer) int {
-	return func(_ []string, _ io.Writer, stderr io.Writer) int {
-		fmt.Fprintf(stderr, "pr-agents %s: not implemented\n", name)
-		return 1
-	}
 }
 
 func usage(w io.Writer) {

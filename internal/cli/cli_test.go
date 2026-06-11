@@ -18,7 +18,7 @@ func TestRun(t *testing.T) {
 		{"version command", []string{"version"}, 0, "pr-agents " + Version, ""},
 		{"list", []string{"list"}, 0, "No PR agents.", ""},
 		{"dispatch needs name", []string{"dispatch"}, 2, "", "--name is required"},
-		{"stub select", []string{"select"}, 1, "", "not implemented"},
+		{"select with no agents", []string{"select"}, 0, "No live PR agents.", ""},
 		{"unknown command", []string{"bogus"}, 2, "", "unknown command"},
 		{"no command", nil, 2, "", "Usage: pr-agents"},
 		{"tool usage", []string{"tool"}, 2, "", "Usage: pr-agents tool"},
