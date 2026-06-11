@@ -70,6 +70,58 @@ func TestPiMetadata(t *testing.T) {
 	}
 }
 
+func TestClaudeBuildArgs(t *testing.T) {
+	a, _ := Get("claude")
+	tests := []struct {
+		name string
+		spec LaunchSpec
+		want []string
+	}{
+		{
+			name: "full worker command",
+			spec: LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"},
+			want: []string{"do the thing", "--append-system-prompt", "INSTR", "--dangerously-skip-permissions"},
+		},
+		{
+			name: "no instructions",
+			spec: LaunchSpec{Task: "t"},
+			want: []string{"t", "--dangerously-skip-permissions"},
+		},
+		{
+			name: "empty task (orchestrator) omits positional",
+			spec: LaunchSpec{InstructionsText: "ORCH"},
+			want: []string{"--append-system-prompt", "ORCH", "--dangerously-skip-permissions"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := a.BuildArgs(tt.spec, "")
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("BuildArgs() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClaudeMetadata(t *testing.T) {
+	a, err := Get("claude")
+	if err != nil {
+		t.Fatalf("Get(claude) error: %v", err)
+	}
+	if a.Kind() != "claude" {
+		t.Errorf("Kind() = %q, want claude", a.Kind())
+	}
+	if a.DefaultLauncher() != "claude" {
+		t.Errorf("DefaultLauncher() = %q, want claude", a.DefaultLauncher())
+	}
+	if a.InstructionMode() != InstructionFlag {
+		t.Errorf("InstructionMode() = %q, want flag", a.InstructionMode())
+	}
+	if a.InstructionFileName() != "" {
+		t.Errorf("InstructionFileName() = %q, want empty", a.InstructionFileName())
+	}
+}
+
 func TestInstructions(t *testing.T) {
 	tests := []struct {
 		role     Role

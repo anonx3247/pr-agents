@@ -1,0 +1,55 @@
+package harness
+
+// claudeAdapter drives the Claude Code harness. Instructions are injected via
+// the --append-system-prompt flag (no instruction FILE is written into the
+// worktree, so the PR diff stays clean); the bare launcher is "claude".
+//
+// Flags verified against the installed Claude Code CLI (`claude --help`,
+// v2.1.170):
+//   - a bare positional argument seeds the interactive session with that prompt
+//     ("claude [options] [command] [prompt]", interactive by default);
+//   - --append-system-prompt appends to the default system prompt;
+//   - --dangerously-skip-permissions bypasses all permission checks so the
+//     subagent works fully autonomously in its worktree (the Claude equivalent
+//     of codex's --dangerously-bypass-approvals-and-sandbox).
+//
+// Sandboxing is intentionally NOT this adapter's concern. pr-agents never calls
+// a sandbox tool; isolation is layered on by the operator overriding the
+// configurable launcher PREFIX (e.g. "isara claude run" / "asb -- claude").
+// Every subagent is its OWN separate launch through that same prefix (the
+// orchestrator dispatches each worker via `pr-agents dispatch`, which re-applies
+// the prefix per pane) — so a sandbox is re-imposed on each subagent rather than
+// inherited from the parent process. --dangerously-skip-permissions only removes
+// Claude's in-pane approval prompts inside that already-isolated worktree; the
+// launcher prefix remains the real trust boundary.
+type claudeAdapter struct{}
+
+func init() { register(claudeAdapter{}) }
+
+func (claudeAdapter) Kind() string { return "claude" }
+
+func (claudeAdapter) DefaultLauncher() string { return "claude" }
+
+func (claudeAdapter) InstructionMode() InstructionMode { return InstructionFlag }
+
+func (claudeAdapter) InstructionFileName() string { return "" }
+
+// BuildArgs mirrors the Claude Code worker command:
+//
+//	<task> --append-system-prompt <instructionsText> --dangerously-skip-permissions
+//
+// The task is the positional initial prompt seeding an interactive pane;
+// instructions are passed inline via the flag, so instructionsPath is ignored.
+// An empty Task is omitted so the orchestrator launches interactively (no seed
+// message). Pure: no IO.
+func (claudeAdapter) BuildArgs(spec LaunchSpec, _ string) []string {
+	args := []string{}
+	if spec.Task != "" {
+		args = append(args, spec.Task)
+	}
+	if spec.InstructionsText != "" {
+		args = append(args, "--append-system-prompt", spec.InstructionsText)
+	}
+	args = append(args, "--dangerously-skip-permissions")
+	return args
+}

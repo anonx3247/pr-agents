@@ -9,8 +9,8 @@ state, CI, and reviews.
 
 Status: early scaffolding. The Go module, core domain (registry, config,
 string/git/PR-state helpers), tmux layer, CLI verbs, harness adapters, and the
-per-session daemon are in place. Later PRs add the interactive `select` picker
-and the claude/codex adapters.
+per-session daemon are in place, with the pi and claude harness adapters. Later
+PRs add the interactive `select` picker and the codex adapter.
 
 ## Build & test
 
@@ -53,6 +53,12 @@ internal/core/           Harness-agnostic pure logic:
   prstate.go               Pure PR-state classification + diff parse helpers
   review.go / ci.go        Pure review/CI selectors + task builders (daemon polls)
   notify.go                Pure finished/cleanup notification builders
+internal/harness/        Harness adapters behind a single Adapter interface:
+  harness.go               Adapter contract, LaunchSpec, kind registry (Get)
+  instructions.go          Role instruction templates (orchestrator/worker/helper)
+  pi.go                    pi adapter (flag-based --append-system-prompt)
+  claude.go                claude (Claude Code) adapter (flag-based
+                           --append-system-prompt, --dangerously-skip-permissions)
 internal/daemon/         Per-session background daemon:
   daemon.go                Poll loop + GH/Tmuxer/Store interfaces (testable ticks)
   poll.go                  PR-state / CI / review / finished tick logic
