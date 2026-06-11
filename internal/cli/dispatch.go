@@ -292,9 +292,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// tmux layer so every call targets the orchestrator's server. A sandbox
 	// launcher strips $TMUX, so without this a sandboxed dispatch cannot locate the
 	// server. Only fail when NO channel yields a socket AND we are not inside tmux.
-	if sock := resolveTmuxSocket(o.tmuxSocket, os.Getenv("TMUX"), rec.TmuxSocket); sock != "" {
-		tmux.SetSocket(sock)
-	}
+	tmux.SetSocket(resolveTmuxSocket(o.tmuxSocket, os.Getenv("TMUX"), rec.TmuxSocket))
 	if !tmux.InsideTmux() {
 		fmt.Fprintln(stderr, "pr-agents dispatch: not inside tmux and no tmux socket resolvable; run `pr-agents start` first")
 		return 1
