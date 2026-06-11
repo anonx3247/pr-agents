@@ -257,10 +257,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// out to dispatch — otherwise a claude/codex fleet would silently spawn pi
 	// workers AND escape the sandbox via the bare default launcher.
 	session := resolveSession(all, cwd)
-	var rec core.SessionRecord
-	if r, ok, _ := core.LoadSessionRecord(cwd, session); ok {
-		rec = r
-	}
+	rec := core.SessionRecordFor(cwd, session)
 	var adapter harness.Adapter
 	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(
 		o.harness, o.launcher, os.Getenv(core.EnvHarness), os.Getenv(core.EnvLauncher), rec)

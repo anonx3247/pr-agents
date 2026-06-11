@@ -197,10 +197,7 @@ func runResume(args []string, stdout, stderr io.Writer) int {
 	// prefix instead of escaping it via the bare default launcher. Each entry's
 	// own PrEntry.Harness still wins per-pane; these are the legacy/launcher
 	// fallbacks.
-	var rec core.SessionRecord
-	if r, ok, _ := core.LoadSessionRecord(cwd, session); ok {
-		rec = r
-	}
+	rec := core.SessionRecordFor(cwd, session)
 	orchHarness := core.ResolveFromSources("", os.Getenv(core.EnvHarness), rec.Harness)
 	launcher := core.ResolveFromSources("", os.Getenv(core.EnvLauncher), rec.Launcher)
 	revived := reviveScope(all, cwd, session, orchHarness, launcher, orchestratorPane())

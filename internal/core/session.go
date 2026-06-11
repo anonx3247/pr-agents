@@ -87,6 +87,15 @@ func LoadSessionRecord(cwd, sessionID string) (SessionRecord, bool, error) {
 	return rec, ok, nil
 }
 
+// SessionRecordFor returns the record for sessionID, or a zero SessionRecord
+// when there is none (missing, garbage, or unknown session). It is the tolerant
+// convenience used by callers that simply want the persisted harness/launcher as
+// a fallback and treat absence as "empty".
+func SessionRecordFor(cwd, sessionID string) SessionRecord {
+	rec, _, _ := LoadSessionRecord(cwd, sessionID)
+	return rec
+}
+
 // SaveSessionRecord upserts the record for sessionID and writes the sessions map
 // atomically (temp file in the same dir, then rename) so a reader never sees a
 // partial file. A no-op-safe empty sessionID is rejected to avoid a junk key.
