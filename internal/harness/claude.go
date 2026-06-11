@@ -10,7 +10,12 @@ package harness
 //   - --append-system-prompt appends to the default system prompt;
 //   - --permission-mode acceptEdits lets it apply edits autonomously in the
 //     worktree without per-action approval (a valid choice alongside "default",
-//     "auto", "bypassPermissions").
+//     "auto", "bypassPermissions"). Verified on claude 2.1.170 that it is NOT
+//     mutually exclusive with --dangerously-skip-permissions (the two coexist,
+//     exit 0, no warning), and that a repeated --permission-mode is last-wins.
+//     This default is therefore safely overridable: the CLI layer appends an
+//     operator's passthrough args (`start ... -- <args>`) AFTER these, so a
+//     later --permission-mode / --dangerously-skip-permissions takes effect.
 //
 // Sandboxing is intentionally NOT this adapter's concern. pr-agents never calls
 // a sandbox tool; isolation is layered on by the operator overriding the
