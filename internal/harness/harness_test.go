@@ -57,6 +57,34 @@ func TestPiBuildArgs(t *testing.T) {
 	}
 }
 
+func TestPiBuildResumeArgs(t *testing.T) {
+	a, _ := Get("pi")
+	tests := []struct {
+		name string
+		spec LaunchSpec
+		want []string
+	}{
+		{
+			name: "keeps -a and --name, drops task/instructions",
+			spec: LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"},
+			want: []string{"--session", "abc123", "-a", "--name", "PR: my pr"},
+		},
+		{
+			name: "no name",
+			spec: LaunchSpec{Task: "t"},
+			want: []string{"--session", "abc123", "-a"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := a.BuildResumeArgs(tt.spec, "abc123")
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("BuildResumeArgs() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPiMetadata(t *testing.T) {
 	a, _ := Get("pi")
 	if a.DefaultLauncher() != "pi" {
@@ -100,6 +128,15 @@ func TestClaudeBuildArgs(t *testing.T) {
 				t.Errorf("BuildArgs() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClaudeBuildResumeArgs(t *testing.T) {
+	a, _ := Get("claude")
+	spec := LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"}
+	want := []string{"--resume", "uuid-1", "--permission-mode", "acceptEdits"}
+	if got := a.BuildResumeArgs(spec, "uuid-1"); !reflect.DeepEqual(got, want) {
+		t.Errorf("BuildResumeArgs() = %#v, want %#v", got, want)
 	}
 }
 
@@ -148,6 +185,15 @@ func TestCodexBuildArgs(t *testing.T) {
 				t.Errorf("BuildArgs() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCodexBuildResumeArgs(t *testing.T) {
+	a, _ := Get("codex")
+	spec := LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"}
+	want := []string{"resume", "uuid-2"}
+	if got := a.BuildResumeArgs(spec, "uuid-2"); !reflect.DeepEqual(got, want) {
+		t.Errorf("BuildResumeArgs() = %#v, want %#v", got, want)
 	}
 }
 

@@ -1,5 +1,11 @@
 package harness
 
+import (
+	"path/filepath"
+	"strings"
+	"time"
+)
+
 // claudeAdapter drives the Claude Code harness. Instructions are injected via
 // the --append-system-prompt flag (no instruction FILE is written into the
 // worktree, so the PR diff stays clean); the bare launcher is "claude".
@@ -52,4 +58,33 @@ func (claudeAdapter) BuildArgs(spec LaunchSpec, _ string) []string {
 	}
 	args = append(args, "--dangerously-skip-permissions")
 	return args
+}
+
+// SessionRef locates the newest Claude Code session for cwd. Claude stores
+// sessions at ~/.claude/projects/<ENC>/<uuid>.jsonl, where <ENC> =
+// encodeClaudeProjectDir(cwd). The returned ref is the session uuid (the file
+// base name without the .jsonl suffix), which Claude's --resume accepts. Picks
+// the newest *.jsonl with mtime >= since; ok=false when the dir is absent.
+func (claudeAdapter) SessionRef(cwd string, since time.Time) (string, bool) {
+	home, err := sessionStoreHome()
+	if err != nil {
+		return "", false
+	}
+	dir := filepath.Join(home, ".claude", "projects", encodeClaudeProjectDir(cwd))
+	path, ok := newestFileInDir(dir, since, func(name string) bool {
+		return strings.HasSuffix(name, ".jsonl")
+	})
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSuffix(filepath.Base(path), ".jsonl"), true
+}
+
+// BuildResumeArgs relaunches Claude Code resuming sessionRef in an interactive
+// pane. Verified against `claude --help`: `-r, --resume [value]` resumes a
+// conversation by session id; --permission-mode acceptEdits keeps autonomous
+// edits in the worktree. No task positional and no --append-system-prompt: the
+// resumed conversation already carries its context. Pure: no IO.
+func (claudeAdapter) BuildResumeArgs(_ LaunchSpec, sessionRef string) []string {
+	return []string{"--resume", sessionRef, "--permission-mode", "acceptEdits"}
 }
