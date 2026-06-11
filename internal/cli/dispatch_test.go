@@ -239,3 +239,62 @@ func TestDispatchPaneEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveHarnessLauncher(t *testing.T) {
+	cases := []struct {
+		name                      string
+		flagH, flagL, envH, envL  string
+		rec                       core.SessionRecord
+		wantHarness, wantLauncher string
+	}{
+		{
+			name:         "all empty falls back to pi + default launcher",
+			wantHarness:  "pi",
+			wantLauncher: "pi",
+		},
+		{
+			name:         "env-stripped sandbox recovers from record",
+			rec:          core.SessionRecord{Harness: "claude", Launcher: "isara claude run"},
+			wantHarness:  "claude",
+			wantLauncher: "isara claude run",
+		},
+		{
+			name:         "env wins over record",
+			envH:         "codex",
+			envL:         "asb -- codex",
+			rec:          core.SessionRecord{Harness: "claude", Launcher: "isara claude run"},
+			wantHarness:  "codex",
+			wantLauncher: "asb -- codex",
+		},
+		{
+			name:         "explicit flags win over env and record",
+			flagH:        "claude",
+			flagL:        "wrap claude",
+			envH:         "codex",
+			envL:         "asb -- codex",
+			rec:          core.SessionRecord{Harness: "pi", Launcher: "pi"},
+			wantHarness:  "claude",
+			wantLauncher: "wrap claude",
+		},
+		{
+			name:         "record harness with no launcher falls back to that adapter default",
+			rec:          core.SessionRecord{Harness: "codex"},
+			wantHarness:  "codex",
+			wantLauncher: "codex",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, l, a, err := resolveHarnessLauncher(c.flagH, c.flagL, c.envH, c.envL, c.rec)
+			if err != nil {
+				t.Fatalf("resolveHarnessLauncher: %v", err)
+			}
+			if h != c.wantHarness || l != c.wantLauncher {
+				t.Errorf("got harness=%q launcher=%q, want %q/%q", h, l, c.wantHarness, c.wantLauncher)
+			}
+			if a == nil {
+				t.Errorf("expected non-nil adapter")
+			}
+		})
+	}
+}

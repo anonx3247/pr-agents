@@ -150,6 +150,28 @@ func dispatchPaneEnv(session, harnessKind, launcher string) map[string]string {
 	}
 }
 
+// resolveHarnessLauncher applies the dispatch precedence — explicit flag > env >
+// persisted session record > final fallback — to the harness kind and launcher
+// prefix, returning the chosen adapter. The harness falls back to "pi" and the
+// launcher to the adapter's DefaultLauncher() when every source is empty. It is
+// the single source of truth so an env-stripped sandbox dispatch still recovers
+// the orchestrator's choice from the record. Pure given the harness registry.
+func resolveHarnessLauncher(flagH, flagL, envH, envL string, rec core.SessionRecord) (harnessKind, launcher string, a harness.Adapter, err error) {
+	harnessKind = core.ResolveFromSources(flagH, envH, rec.Harness)
+	if harnessKind == "" {
+		harnessKind = "pi"
+	}
+	a, err = harness.Get(harnessKind)
+	if err != nil {
+		return harnessKind, "", nil, err
+	}
+	launcher = core.ResolveFromSources(flagL, envL, rec.Launcher)
+	if launcher == "" {
+		launcher = a.DefaultLauncher()
+	}
+	return harnessKind, launcher, a, nil
+}
+
 // removeEntryByID returns entries with any entry matching id removed. Pure.
 func removeEntryByID(entries []core.PrEntry, id string) []core.PrEntry {
 	out := make([]core.PrEntry, 0, len(entries))
@@ -239,18 +261,12 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if r, ok, _ := core.LoadSessionRecord(cwd, session); ok {
 		rec = r
 	}
-	o.harness = core.ResolveFromSources(o.harness, os.Getenv(core.EnvHarness), rec.Harness)
-	if o.harness == "" {
-		o.harness = "pi"
-	}
-	adapter, err := harness.Get(o.harness)
+	var adapter harness.Adapter
+	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(
+		o.harness, o.launcher, os.Getenv(core.EnvHarness), os.Getenv(core.EnvLauncher), rec)
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
-	}
-	o.launcher = core.ResolveFromSources(o.launcher, os.Getenv(core.EnvLauncher), rec.Launcher)
-	if o.launcher == "" {
-		o.launcher = adapter.DefaultLauncher()
 	}
 
 	// Depth enforcement via cwd→registry: a worker recovers its own depth from
