@@ -163,11 +163,6 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	os.Setenv(core.EnvSession, session)
 	os.Setenv(core.EnvHarness, harnessKind)
 	os.Setenv(core.EnvLauncher, launcher)
-	// Record the operator's harness passthrough args (after `--`) so dispatch
-	// replays them onto every worker — a subagent then runs with the same
-	// harness options (e.g. a YOLO/--full-auto override, model choice) the
-	// operator chose for the main agent.
-	os.Setenv(core.EnvHarnessArgs, core.EncodeHarnessArgs(extra))
 
 	// Best-effort: start the per-session daemon detached. Failure or a no-op
 	// (e.g. not inside tmux) must never block the orchestrator.

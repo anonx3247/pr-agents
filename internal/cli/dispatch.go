@@ -298,29 +298,21 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if o.simplify {
 		simplifyEnv = "1"
 	}
-	// Operator harness passthrough args (e.g. a YOLO/--full-auto override, a
-	// model choice) flow from `pr-agents start -- <args>` via the env. Replay
-	// them on this worker so it runs with the same harness options the operator
-	// chose for the main agent, and re-export them so a nested dispatch keeps
-	// propagating them down the tree.
-	harnessArgs := core.DecodeHarnessArgs(os.Getenv(core.EnvHarnessArgs))
 	env := map[string]string{
-		core.EnvDepth:       fmt.Sprintf("%d", depth+1),
-		core.EnvSession:     session,
-		core.EnvID:          id,
-		core.EnvHarness:     o.harness,
-		core.EnvLauncher:    o.launcher,
-		core.EnvHarnessArgs: core.EncodeHarnessArgs(harnessArgs),
-		core.EnvSimplify:    simplifyEnv,
-		core.EnvMode:        string(plan.mode),
-		core.EnvBase:        plan.base,
-		core.EnvBranch:      plan.branch,
-		core.EnvName:        o.name,
+		core.EnvDepth:    fmt.Sprintf("%d", depth+1),
+		core.EnvSession:  session,
+		core.EnvID:       id,
+		core.EnvHarness:  o.harness,
+		core.EnvLauncher: o.launcher,
+		core.EnvSimplify: simplifyEnv,
+		core.EnvMode:     string(plan.mode),
+		core.EnvBase:     plan.base,
+		core.EnvBranch:   plan.branch,
+		core.EnvName:     o.name,
 	}
 	spec.Env = env
 
-	adapterArgs := append(adapter.BuildArgs(spec, instructionsPath), harnessArgs...)
-	command := buildLaunchCommand(o.launcher, adapterArgs, os.Getenv("SHELL"))
+	command := buildLaunchCommand(o.launcher, adapter.BuildArgs(spec, instructionsPath), os.Getenv("SHELL"))
 	title := core.PaneTitle(core.PaneTitleArgs{PrName: o.name, Branch: plan.branch})
 	window := core.WindowName(core.PaneTitleArgs{PrName: o.name, Branch: plan.branch})
 

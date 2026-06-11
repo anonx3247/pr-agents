@@ -132,12 +132,12 @@ func TestCodexBuildArgs(t *testing.T) {
 		{
 			name: "full worker command (instructions via AGENTS.md, not argv)",
 			spec: LaunchSpec{Task: "do the thing", InstructionsText: "INSTR", PrName: "my pr"},
-			want: []string{"do the thing", "--full-auto"},
+			want: []string{"do the thing", "--dangerously-bypass-approvals-and-sandbox"},
 		},
 		{
 			name: "no task (orchestrator) omits positional",
 			spec: LaunchSpec{InstructionsText: "ORCH"},
-			want: []string{"--full-auto"},
+			want: []string{"--dangerously-bypass-approvals-and-sandbox"},
 		},
 	}
 	for _, tt := range tests {

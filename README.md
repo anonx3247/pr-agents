@@ -60,7 +60,9 @@ internal/harness/        Harness adapters behind a single Adapter interface:
   claude.go                claude (Claude Code) adapter (flag-based
                            --append-system-prompt, --dangerously-skip-permissions)
   codex.go                 codex (Codex CLI) adapter (file-based: instructions
-                           injected via an auto-loaded AGENTS.md, --full-auto)
+                           injected via an auto-loaded AGENTS.md; subagents run
+                           fully autonomously via
+                           --dangerously-bypass-approvals-and-sandbox)
 internal/daemon/         Per-session background daemon:
   daemon.go                Poll loop + GH/Tmuxer/Store interfaces (testable ticks)
   poll.go                  PR-state / CI / review / finished tick logic
