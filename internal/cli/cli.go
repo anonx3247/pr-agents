@@ -22,25 +22,34 @@ type command struct {
 	run     func(args []string, stdout, stderr io.Writer) int
 }
 
-// commands is the dispatch table. select remains a stub until a later PR
-// implements the interactive picker.
+// commands is the top-level dispatch table: human- and orchestrator-facing
+// orchestration/inspection verbs. The worker-plumbing verbs live under the
+// `tool` parent command (see toolCommands). select remains a stub until a later
+// PR implements the interactive picker.
 var commands = map[string]command{
-	"version":       {"Print the pr-agents version", runVersion},
-	"start":         {"Launch the orchestrator in a tmux session", runStart},
-	"dispatch":      {"Create a worktree + branch + pane and hand off one PR", runDispatch},
-	"list":          {"List PR agents with number/name/branch/status", runList},
-	"peek":          {"Read a PR agent's recent pane output", runPeek},
-	"send":          {"Send a message to a running PR agent", runSend},
-	"stop":          {"Interrupt or kill a PR agent", runStop},
-	"focus":         {"Move tmux focus to a PR agent's pane", runFocus},
-	"cleanup":       {"Remove merged/closed PR worktrees", runCleanup},
+	"version":  {"Print the pr-agents version", runVersion},
+	"start":    {"Launch the orchestrator in a tmux session", runStart},
+	"dispatch": {"Create a worktree + branch + pane and hand off one PR", runDispatch},
+	"list":     {"List PR agents with number/name/branch/status", runList},
+	"peek":     {"Read a PR agent's recent pane output", runPeek},
+	"send":     {"Send a message to a running PR agent", runSend},
+	"stop":     {"Interrupt or kill a PR agent", runStop},
+	"focus":    {"Move tmux focus to a PR agent's pane", runFocus},
+	"cleanup":  {"Remove merged/closed PR worktrees", runCleanup},
+	"select":   {"Interactively select a PR agent", stub("select")},
+	"daemon":   {"Run the per-session background daemon", runDaemon},
+	"tool":     {"Worker-plumbing subcommands (agent-only)", runTool},
+}
+
+// toolCommands is the dispatch table for the agent-only worker-plumbing verbs,
+// reached as `pr-agents tool <sub>`. These manipulate the current worker's own
+// registry entry and are not meant for humans/orchestrators.
+var toolCommands = map[string]command{
 	"context":       {"Print the current PR identity resolved from the cwd", runContext},
 	"set-pr-number": {"Record the PR number on the current worker's entry", runSetPrNumber},
 	"mark-pushed":   {"Mark the current worker's PR as pushed (starts polling)", runMarkPushed},
 	"report-result": {"Record the current worker's final result text", runReportResult},
 	"reply-review":  {"Reply to a reviewer's inline comment thread", runReplyReview},
-	"select":        {"Interactively select a PR agent", stub("select")},
-	"daemon":        {"Run the per-session background daemon", runDaemon},
 }
 
 // Run is the entrypoint invoked by main. It parses the root flags, resolves the
@@ -67,11 +76,36 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	name := rest[0]
 	cmd, ok := commands[name]
 	if !ok {
+		if _, moved := toolCommands[name]; moved {
+			fmt.Fprintf(stderr, "pr-agents: %q moved to `pr-agents tool %s`\n", name, name)
+			return 2
+		}
 		fmt.Fprintf(stderr, "pr-agents: unknown command %q\n\n", name)
 		usage(stderr)
 		return 2
 	}
 	return cmd.run(rest[1:], stdout, stderr)
+}
+
+// runTool dispatches the `tool` parent command to its worker-plumbing
+// subcommands. With no args (or --help) it prints the tool usage listing.
+func runTool(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		toolUsage(stderr)
+		return 2
+	}
+	sub := args[0]
+	if sub == "-h" || sub == "--help" {
+		toolUsage(stdout)
+		return 0
+	}
+	cmd, ok := toolCommands[sub]
+	if !ok {
+		fmt.Fprintf(stderr, "pr-agents tool: unknown subcommand %q\n\n", sub)
+		toolUsage(stderr)
+		return 2
+	}
+	return cmd.run(args[1:], stdout, stderr)
 }
 
 func runVersion(_ []string, stdout, _ io.Writer) int {
@@ -93,12 +127,31 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: pr-agents [--version] <command> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
-	names := make([]string, 0, len(commands))
-	for name := range commands {
+	printCommands(w, commands)
+}
+
+func toolUsage(w io.Writer) {
+	fmt.Fprintln(w, "pr-agents tool — worker-plumbing subcommands (agent-only)")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage: pr-agents tool <subcommand> [args]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Subcommands:")
+	printCommands(w, toolCommands)
+}
+
+// printCommands writes the names and summaries of a dispatch table, sorted by
+// name and padded to the widest name.
+func printCommands(w io.Writer, cmds map[string]command) {
+	names := make([]string, 0, len(cmds))
+	width := 0
+	for name := range cmds {
 		names = append(names, name)
+		if len(name) > width {
+			width = len(name)
+		}
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		fmt.Fprintf(w, "  %-14s %s\n", name, commands[name].summary)
+		fmt.Fprintf(w, "  %-*s %s\n", width, name, cmds[name].summary)
 	}
 }

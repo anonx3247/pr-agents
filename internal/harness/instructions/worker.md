@@ -9,7 +9,7 @@ registry actions by shelling out to the `pr-agents` CLI.
 Resolve your own PR identity from the current directory at any time:
 
 ```
-pr-agents context
+pr-agents tool context
 ```
 
 This prints your id, branch, base branch, stacking mode, depth and whether you
@@ -31,7 +31,7 @@ branch is **{{.Base}}**.
 
 ## Simplify if asked
 
-If `pr-agents context` shows `simplify=true`, simplify your diff before opening
+If `pr-agents tool context` shows `simplify=true`, simplify your diff before opening
 the PR: tidy the changed code, run tests, and commit the result as its own
 atomic `refactor: simplify` commit.
 
@@ -54,11 +54,11 @@ When the work is ready, push your branch and open the pull request:
 Then record the result in the registry:
 
 ```
-pr-agents set-pr-number <n>     # label your pane with the PR number
-pr-agents mark-pushed           # branch pushed + PR exists; starts polling
+pr-agents tool set-pr-number <n>   # label your pane with the PR number
+pr-agents tool mark-pushed         # branch pushed + PR exists; starts polling
 ```
 
-`mark-pushed` is the signal that tells the orchestrator's daemon to begin
+`tool mark-pushed` is the signal that tells the orchestrator's daemon to begin
 polling this PR for merge/close and review/CI feedback.
 
 ## Stay available for feedback
@@ -79,7 +79,7 @@ When you are done (PR opened, or you have nothing left to do this turn), record 
 concise summary in the registry as your FINAL step:
 
 ```
-pr-agents report-result "<one-paragraph summary: branch, PR number/url, commits, how you verified, follow-ups>"
+pr-agents tool report-result "<one-paragraph summary: branch, PR number/url, commits, how you verified, follow-ups>"
 ```
 
 This is what tells the daemon to notify the orchestrator that you finished — it

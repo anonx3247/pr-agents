@@ -86,17 +86,22 @@ inside tmux. It polls:
 - **CI failures → worker** — new failing checks (deduped per head commit) hand
   the worker a fix task on its own pane.
 - **Review comments → worker** — new inline comments/reviews/issue comments hand
-  the worker an address-and-reply task; replies go via `pr-agents reply-review`
-  (which never resolves the thread).
+  the worker an address-and-reply task; replies go via `pr-agents tool
+  reply-review` (which never resolves the thread).
 - **Worker finished → orchestrator** — purely registry-driven via the result
-  recorded by `pr-agents report-result`.
+  recorded by `pr-agents tool report-result`.
 - **Dock auto-flip** — keeps the newest live PR pane docked right of the
   orchestrator (opt out with `--no-dock`); the orchestrator pane is never
   broken or killed.
 
 The CLI uses only the Go stdlib `flag` package plus a small hand-rolled
 subcommand dispatch — no third-party CLI framework — to keep dependencies
-minimal.
+minimal. Human/orchestrator-facing verbs (`start`, `daemon`, `dispatch`,
+`list`, `peek`, `focus`, `send`, `stop`, `cleanup`, `select`, `version`) are
+top-level; the agent-only worker-plumbing verbs are namespaced under a `tool`
+parent command (`pr-agents tool context`, `tool set-pr-number`,
+`tool mark-pushed`, `tool report-result`, `tool reply-review`). Running a moved
+verb at the top level prints a hint pointing at its `pr-agents tool …` form.
 
 ## State & configuration
 
@@ -109,7 +114,7 @@ minimal.
   (harness-agnostic: at the repo root, not under a harness-specific dir).
 - **Depth & identity** — a worker recovers its FULL identity (id, branch, base,
   mode, simplify, depth, session) purely from `cwd→registry` via
-  `pr-agents context` (`core.ResolveContextFromCwd`), so nothing worker-targeted
+  `pr-agents tool context` (`core.ResolveContextFromCwd`), so nothing worker-targeted
   has to cross a sandbox boundary. Depth is likewise derived from the cwd
   (`core.DepthFromCwd`): 0 = orchestrator (the main repo, outside any
   worktree), 1 = PR subagent, 2 = helper. The only env vars carried across
