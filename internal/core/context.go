@@ -31,6 +31,17 @@ func ResolveContextFromCwd(entries []PrEntry, cwd string) *PrEntry {
 	return best
 }
 
+// DepthFromCwd derives the caller's nesting depth purely from cwd→registry,
+// with NO reliance on an env contract: depth 0 when cwd is not inside any
+// registered worktree (the orchestrator in the main repo), else the resolved
+// entry's Depth (1 = PR subagent, 2 = helper).
+func DepthFromCwd(entries []PrEntry, cwd string) int {
+	if e := ResolveContextFromCwd(entries, cwd); e != nil {
+		return e.Depth
+	}
+	return 0
+}
+
 // normalizePath cleans p and strips a single trailing separator so comparisons
 // are stable. Empty input stays empty.
 func normalizePath(p string) string {

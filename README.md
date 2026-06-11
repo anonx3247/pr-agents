@@ -43,7 +43,8 @@ CI (`.github/workflows/ci.yml`) runs the gofmt check, `go vet ./...`,
 main.go                  Thin entrypoint → internal/cli.Run
 internal/cli/            Root command, stdlib-flag dispatch, CLI verbs (incl. daemon)
 internal/core/           Harness-agnostic pure logic:
-  env.go                   PRA_* env-var contract + Depth()
+  env.go                   Orchestrator-side PRA_* env contract
+  context.go               ResolveContextFromCwd + DepthFromCwd (cwd→registry)
   strings.go               Slugify, Shq, BuildEnv, CapTail, PaneTitle, WindowName
   git.go                   RepoRoot, GitCommonDir, DefaultBranch, UniqueBranch,
                            WorktreesDirFrom, AppendExcludeEntry/EnsureExcluded
@@ -106,8 +107,11 @@ minimal.
 - **Project config** — the default stacking strategy (`github` | `graphite`)
   used when stacking dependent PRs is stored at `<repo-root>/.pr-agents.json`
   (harness-agnostic: at the repo root, not under a harness-specific dir).
-- **Depth & environment** — nesting depth and dispatch parameters are carried
-  across harness processes via `PRA_*` environment variables (`PRA_DEPTH`,
-  `PRA_SESSION`, `PRA_ID`, `PRA_MODE`, `PRA_BASE`, `PRA_BRANCH`, `PRA_NAME`,
-  `PRA_SIMPLIFY`, `PRA_HARNESS`). Depth 0 = orchestrator, 1 = PR subagent,
-  2 = helper.
+- **Depth & identity** — a worker recovers its FULL identity (id, branch, base,
+  mode, simplify, depth, session) purely from `cwd→registry` via
+  `pr-agents context` (`core.ResolveContextFromCwd`), so nothing worker-targeted
+  has to cross a sandbox boundary. Depth is likewise derived from the cwd
+  (`core.DepthFromCwd`): 0 = orchestrator (the main repo, outside any
+  worktree), 1 = PR subagent, 2 = helper. The only env vars carried across
+  harness processes are the orchestrator-side `PRA_SESSION`, `PRA_HARNESS`, and
+  `PRA_LAUNCHER`, set by `start` and read by `dispatch`/`daemon`.

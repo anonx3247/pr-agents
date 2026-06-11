@@ -137,6 +137,30 @@ func buildTaskMessage(name, branch, base string, mode core.Mode, task string, si
 	return strings.Join(lines, "\n")
 }
 
+// dispatchPaneEnv builds the minimal pane environment for a dispatched worker:
+// only the orchestrator-side contract that a nested dispatch inherits (session
+// ownership + harness/launcher defaults). The worker derives its OWN identity
+// from cwd→registry, so no worker-targeted PRA_* vars are emitted (they would
+// not survive a sandbox boundary anyway). Pure.
+func dispatchPaneEnv(session, harnessKind, launcher string) map[string]string {
+	return map[string]string{
+		core.EnvSession:  session,
+		core.EnvHarness:  harnessKind,
+		core.EnvLauncher: launcher,
+	}
+}
+
+// removeEntryByID returns entries with any entry matching id removed. Pure.
+func removeEntryByID(entries []core.PrEntry, id string) []core.PrEntry {
+	out := make([]core.PrEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.ID != id {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // genID returns an 8-hex-char id for a new registry entry.
 func genID() string {
 	var b [4]byte
@@ -211,13 +235,12 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Depth enforcement via cwd→registry (env is best-effort only). A helper
-	// (depth 2) context must refuse to dispatch.
-	ctxEntry := core.ResolveContextFromCwd(all, cwd)
-	depth := core.Depth()
+	// Depth enforcement via cwd→registry: a worker recovers its own depth from
+	// its worktree path, with no env contract. A helper (depth 2) must refuse to
+	// dispatch further subagents.
+	depth := core.DepthFromCwd(all, cwd)
 	parentID := "root"
-	if ctxEntry != nil {
-		depth = ctxEntry.Depth
+	if ctxEntry := core.ResolveContextFromCwd(all, cwd); ctxEntry != nil {
 		parentID = ctxEntry.ID
 	}
 	if depth >= 2 {
@@ -294,36 +317,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 
 	id := genID()
-	simplifyEnv := "0"
-	if o.simplify {
-		simplifyEnv = "1"
-	}
-	env := map[string]string{
-		core.EnvDepth:    fmt.Sprintf("%d", depth+1),
-		core.EnvSession:  session,
-		core.EnvID:       id,
-		core.EnvHarness:  o.harness,
-		core.EnvLauncher: o.launcher,
-		core.EnvSimplify: simplifyEnv,
-		core.EnvMode:     string(plan.mode),
-		core.EnvBase:     plan.base,
-		core.EnvBranch:   plan.branch,
-		core.EnvName:     o.name,
-	}
+	env := dispatchPaneEnv(session, o.harness, o.launcher)
 	spec.Env = env
 
 	command := buildLaunchCommand(o.launcher, adapter.BuildArgs(spec, instructionsPath), os.Getenv("SHELL"))
 	title := core.PaneTitle(core.PaneTitleArgs{PrName: o.name, Branch: plan.branch})
 	window := core.WindowName(core.PaneTitleArgs{PrName: o.name, Branch: plan.branch})
 
-	paneID, err := tmux.OpenWindow(worktree, command, title, window, env)
-	if err != nil {
-		core.RemoveWorktree(root, worktree)
-		core.DeleteBranch(root, plan.branch)
-		fmt.Fprintf(stderr, "pr-agents dispatch: failed to open tmux window: %v\n", err)
-		return 1
-	}
-
+	// Persist the fully-populated entry BEFORE the pane launches so that
+	// `pr-agents context` resolves immediately inside the worker (cwd→registry),
+	// even before the pane id is known. The pane id is patched in afterwards.
 	entry := core.PrEntry{
 		ID:        id,
 		SessionID: session,
@@ -331,7 +334,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		Branch:    plan.branch,
 		Base:      plan.base,
 		Mode:      plan.mode,
-		PaneID:    paneID,
 		Worktree:  worktree,
 		Depth:     depth + 1,
 		ParentID:  parentID,
@@ -340,6 +342,23 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		CreatedAt: nowRFC3339(),
 	}
 	if err := core.SaveRegistry(cwd, append(all, entry)); err != nil {
+		core.RemoveWorktree(root, worktree)
+		core.DeleteBranch(root, plan.branch)
+		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
+		return 1
+	}
+
+	paneID, err := tmux.OpenWindow(worktree, command, title, window, env)
+	if err != nil {
+		core.RemoveWorktree(root, worktree)
+		core.DeleteBranch(root, plan.branch)
+		if latest, lerr := core.LoadRegistry(cwd); lerr == nil {
+			_ = core.SaveRegistry(cwd, removeEntryByID(latest, id))
+		}
+		fmt.Fprintf(stderr, "pr-agents dispatch: failed to open tmux window: %v\n", err)
+		return 1
+	}
+	if _, _, err := core.UpdateEntry(cwd, id, func(p *core.PrEntry) { p.PaneID = paneID }); err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
 	}
