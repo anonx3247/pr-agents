@@ -85,12 +85,13 @@ func runStart(args []string, stdout, stderr io.Writer) int {
 		*launcher = adapter.DefaultLauncher()
 	}
 
-	// Stable session id: reuse PRA_SESSION when re-exec'd inside tmux, else mint
-	// a fresh one that survives into the tmux session via -e.
-	session := os.Getenv(core.EnvSession)
-	if session == "" {
-		session = genID()
-	}
+	// Stable scope id across resume: prefer the orchestrator harness's own
+	// resumable session ref for cwd (so resuming the same session re-scopes to
+	// the same registry entries), then the PRA_SESSION env carried across the
+	// tmux re-exec, then a random mint for a first-ever start. cwd is best-effort
+	// here; an error leaves the resolver to fall through to env/fallback.
+	cwd, _ := os.Getwd()
+	session := core.ResolveScopeID(scopeRefResolver(*harnessKind, cwd), os.Getenv(core.EnvSession), genID)
 
 	if !tmux.InsideTmux() {
 		return startOutsideTmux(stderr, session, *harnessKind, *launcher)
@@ -167,6 +168,15 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	// Best-effort: start the per-session daemon detached. Failure or a no-op
 	// (e.g. not inside tmux) must never block the orchestrator.
 	startDaemon(session, harnessKind, orchestratorPane())
+
+	// Auto-revive on a resume-start: when this scope already owns registry
+	// entries, re-dock a live agent and relaunch any dead PR panes BEFORE handing
+	// off to the harness. Guarded; a fresh scope (no entries) is a no-op.
+	if all, err := core.LoadRegistry(cwd); err == nil {
+		if len(core.EntriesForSession(all, session)) > 0 {
+			reviveScope(all, cwd, session, harnessKind, launcher, orchestratorPane())
+		}
+	}
 
 	argv := buildOrchestratorArgv(launcher, adapter.BuildArgs(spec, instructionsPath), extra)
 	if len(argv) == 0 {

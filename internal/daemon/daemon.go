@@ -214,17 +214,19 @@ func (d *Daemon) tickFast() {
 // entry that already carries a ref is skipped by SelectSessionCaptureTargets),
 // bounded (a resolver miss simply retries on a later tick), and degrades
 // silently: an absent session store yields ok=false and the entry is left
-// untouched. The harness kind comes from the daemon's config and is persisted
+// untouched. The harness kind comes from the ENTRY's own dispatched harness
+// (falling back to the daemon's config for legacy entries) and is persisted
 // alongside the ref so a later revive knows how to resume it.
 func (d *Daemon) captureSessions() {
 	for _, e := range core.SelectSessionCaptureTargets(d.entries(), d.tm.PaneAlive) {
-		ref, ok := d.resolveSession(d.cfg.Harness, e.Worktree, parseCreatedAt(e.CreatedAt))
+		kind := core.EntryHarness(e, d.cfg.Harness)
+		ref, ok := d.resolveSession(kind, e.Worktree, parseCreatedAt(e.CreatedAt))
 		if !ok {
 			continue
 		}
 		d.store.Update(e.ID, func(p *core.PrEntry) {
 			p.WorkerSessionRef = ref
-			p.WorkerSessionHarness = d.cfg.Harness
+			p.WorkerSessionHarness = kind
 		})
 	}
 }

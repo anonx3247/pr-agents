@@ -64,6 +64,36 @@ func isSubpath(child, parent string) bool {
 	return strings.HasPrefix(child, prefix)
 }
 
+// ScopeRefResolver resolves the orchestrator's OWN resumable session reference
+// for the main repo cwd, returning ok=false when none can be located. It is
+// injected so ResolveScopeID stays pure and unit-testable without scanning the
+// real "~" session stores.
+type ScopeRefResolver func() (ref string, ok bool)
+
+// ResolveScopeID derives the STABLE scope id that owns the orchestrator's
+// registry entries (a port of pi's resolveOrchestratorSessionId, made
+// harness-agnostic). Resolution order:
+//
+//  1. the orchestrator's real harness session ref (resolveRef): because the
+//     harness reopens the SAME session on resume, this yields the same ref and
+//     thus the same scope, so the orchestrator re-scopes to its existing
+//     entries; a genuinely fresh session yields a new ref and a new scope.
+//  2. the PRA_SESSION env var (carried across a tmux re-exec / nested process).
+//  3. a random fallback for a first-ever start with no session on disk yet.
+func ResolveScopeID(resolveRef ScopeRefResolver, env string, fallback func() string) string {
+	if resolveRef != nil {
+		if ref, ok := resolveRef(); ok {
+			if r := strings.TrimSpace(ref); r != "" {
+				return r
+			}
+		}
+	}
+	if e := strings.TrimSpace(env); e != "" {
+		return e
+	}
+	return fallback()
+}
+
 // PickRedockAgent chooses which agent to (re)dock: the most-recently-created
 // LIVE depth-1 PR agent. Liveness is supplied via the isAlive predicate so the
 // logic stays pure and unit-testable. Returns nil when there are no live agents.
@@ -128,6 +158,52 @@ func SelectSessionCaptureTargets(entries []PrEntry, isAlive func(paneID string) 
 	for _, e := range entries {
 		if e.Depth != 1 || e.WorkerSessionRef != "" || e.PaneID == "" || !isAlive(e.PaneID) {
 			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// RevivableChecks injects the liveness/filesystem/session facts that
+// SelectRevivableAgents needs, keeping the selection pure and unit-testable
+// without touching tmux, the filesystem, or the real "~" session stores.
+type RevivableChecks struct {
+	// PaneAlive reports whether a pane id is still a live tmux pane.
+	PaneAlive func(paneID string) bool
+	// WorktreeExists reports whether the entry's worktree dir still exists.
+	WorktreeExists func(path string) bool
+	// SessionResolvable reports whether the entry carries a usable
+	// WorkerSessionRef that its harness can resume.
+	SessionResolvable func(e PrEntry) bool
+}
+
+// SelectRevivableAgents returns the entries that should be REVIVED on
+// orchestrator resume (a port of pi's selectRevivableAgents). An entry is
+// revivable when it is a depth-1 PR worker, non-terminal, its tmux pane is DEAD,
+// its worktree still EXISTS on disk, and it has a resumable WorkerSessionRef.
+//
+// Depth-2 helpers are intentionally EXCLUDED: a revived worker re-spawns its own
+// helpers if it needs them, so reviving helpers here would double them. Live
+// panes (still running), terminal/finished entries (merged/closed/stopped), and
+// entries whose worktree was reaped are all skipped too. Pure: every fact comes
+// from checks, so it is table-testable with fakes.
+func SelectRevivableAgents(entries []PrEntry, checks RevivableChecks) []PrEntry {
+	out := make([]PrEntry, 0)
+	for _, e := range entries {
+		if e.Depth != 1 {
+			continue // depth-2 helpers are re-spawned by their revived parent
+		}
+		if e.Status == StatusMerged || e.Status == StatusClosed || e.Status == StatusStopped {
+			continue // terminal/finished: nothing to revive
+		}
+		if e.PaneID != "" && checks.PaneAlive(e.PaneID) {
+			continue // still running
+		}
+		if e.Worktree == "" || !checks.WorktreeExists(e.Worktree) {
+			continue // worktree reaped; cannot resume in place
+		}
+		if !checks.SessionResolvable(e) {
+			continue // no usable session ref to resume
 		}
 		out = append(out, e)
 	}

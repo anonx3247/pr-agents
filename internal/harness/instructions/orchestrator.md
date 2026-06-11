@@ -43,6 +43,26 @@ worker commits atomically and opens its own PR.
 - `pr-agents focus <id>` — bring a worker's pane full-screen.
 - `pr-agents stop <id> [--kill]` — interrupt (Escape) or kill a worker's pane.
 
+## Resuming a session
+
+`pr-agents` is a CLI, so it has no harness `session_start` hook. When you START
+or RESUME a session, run:
+
+```
+pr-agents resume
+```
+
+It re-derives your STABLE scope id (so a resumed session re-scopes to the same
+registry entries), re-docks a live worker pane beside you, and relaunches a
+fresh pane for every PR worker whose pane died while its worktree + recorded
+session still exist. It is fully guarded and a no-op when there is nothing to
+revive. (`pr-agents start` already auto-runs this revive path when your scope
+already owns entries; running `pr-agents resume` yourself is the explicit
+entry point and is always safe to repeat.)
+
+Only depth-1 PR workers are revived; a revived worker re-spawns its own depth-2
+helpers if it needs them, so helpers are intentionally not revived here.
+
 ## Cleanup
 
 As PRs merge or close, run `pr-agents cleanup` to remove their worktrees,

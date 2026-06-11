@@ -100,9 +100,46 @@ inside tmux. It polls:
   and persists it (with its harness kind) to the entry. It is idempotent (set
   once), bounded (a miss retries next tick), and local-only (no network).
 
+## Resume & revive
+
+`pr-agents` is a CLI with no harness `session_start` hook, so resume is an
+EXPLICIT verb the orchestrator runs on startup/resume:
+
+```bash
+pr-agents resume
+```
+
+It ports pi's `reviveDeadAgents` harness-agnostically:
+
+- **Stable scope id** — `core.ResolveScopeID` derives the scope that owns the
+  registry entries: the orchestrator's real harness session ref
+  (`harness.Get(kind).SessionRef(mainRepoCwd, …)`) wins, then `PRA_SESSION`,
+  then a random mint. Because the harness reopens the SAME session on resume,
+  the ref — and thus the scope — is stable, so the orchestrator re-scopes to its
+  existing entries; a fresh session yields a new scope. `start` and the
+  registry-scoping verbs resolve the scope the same way.
+- **Revive selection** — `core.SelectRevivableAgents` picks the depth-1 workers
+  that are non-terminal, whose tmux pane is DEAD, whose worktree still EXISTS,
+  and which carry a usable `WorkerSessionRef`. It is pure (pane/worktree/session
+  facts are injected). Depth-2 helpers are intentionally EXCLUDED: a revived
+  worker re-spawns its own helpers if it needs them.
+- **Relaunch + re-dock** — for each revivable entry, `resume` relaunches a new
+  background tmux pane running `<launcher> <harness.Get(entry-harness)
+  .BuildResumeArgs(spec, entry.WorkerSessionRef)>` in the worktree (reusing the
+  dispatch/daemon tmux + dock primitives, ending the pane command with
+  `; exec $SHELL` so it survives the harness exiting), updates the entry's
+  `PaneID`, and re-docks the pane beside the orchestrator. It is fully guarded —
+  one bad entry never aborts the rest.
+
+Each worker entry records the harness it was DISPATCHED with (`PrEntry.Harness`),
+so both session capture and revive pick the adapter via the ENTRY's own harness
+(falling back to the daemon/orchestrator harness for legacy entries).
+`pr-agents start` auto-runs the revive path when its scope already owns entries;
+`pr-agents resume` is the always-safe-to-repeat explicit entry point.
+
 The CLI uses only the Go stdlib `flag` package plus a small hand-rolled
 subcommand dispatch — no third-party CLI framework — to keep dependencies
-minimal. Human/orchestrator-facing verbs (`start`, `daemon`, `dispatch`,
+minimal. Human/orchestrator-facing verbs (`start`, `daemon`, `dispatch`, `resume`,
 `list`, `peek`, `focus`, `send`, `stop`, `cleanup`, `select`, `version`) are
 top-level; the agent-only worker-plumbing verbs are namespaced under a `tool`
 parent command (`pr-agents tool context`, `tool set-pr-number`,
