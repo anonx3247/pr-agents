@@ -45,6 +45,7 @@ func resolveSession(entries []core.PrEntry, cwd string) string {
 		scopeRefResolver(os.Getenv(core.EnvHarness), cwd),
 		"",
 		func() string { return "" },
+		false,
 	)
 }
 

@@ -30,6 +30,28 @@ func TestSplitDoubleDash(t *testing.T) {
 	}
 }
 
+func TestStripFreshFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no fresh", []string{"start", "--harness", "pi"}, []string{"start", "--harness", "pi"}},
+		{"double dash fresh", []string{"start", "--fresh", "--harness", "pi"}, []string{"start", "--harness", "pi"}},
+		{"single dash fresh", []string{"start", "-fresh"}, []string{"start"}},
+		{"fresh with value", []string{"start", "--fresh=true"}, []string{"start"}},
+		{"single dash fresh with value", []string{"start", "-fresh=false"}, []string{"start"}},
+		{"not a flag named freshly", []string{"start", "--freshly"}, []string{"start", "--freshly"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stripFreshFlag(tt.args); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("stripFreshFlag(%#v) = %#v, want %#v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTmuxEnvFlags(t *testing.T) {
 	env := map[string]string{"PRA_SESSION": "s1", "PRA_HARNESS": "pi"}
 	got := tmuxEnvFlags(env)

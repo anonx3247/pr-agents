@@ -52,6 +52,23 @@ func buildOrchestratorArgv(launcher string, adapterArgs, extra []string) []strin
 	return append(argv, extra...)
 }
 
+// stripFreshFlag removes any --fresh/-fresh token (with or without an =value)
+// from args. It is used when re-execing `start` inside tmux: the OUTER process
+// already minted the fresh scope id and carries it via PRA_SESSION, so the inner
+// invocation must NOT mint a SECOND new id (which would mismatch the tmux
+// session name). Pure.
+func stripFreshFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "-fresh" || a == "--fresh" ||
+			strings.HasPrefix(a, "-fresh=") || strings.HasPrefix(a, "--fresh=") {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // splitDoubleDash splits args at the first "--": before goes to flag parsing,
 // after is passthrough to the harness. When no "--" is present, all args are
 // flag args.
@@ -70,6 +87,7 @@ func runStart(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	harnessKind := fs.String("harness", os.Getenv(core.EnvHarness), "Harness adapter: pi|claude|codex")
 	launcher := fs.String("launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix before the harness args")
+	fresh := fs.Bool("fresh", false, "Mint a brand-new scope id instead of reusing the carried-over/derived one (start a clean scope that adopts no prior registry entries)")
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -89,9 +107,11 @@ func runStart(args []string, stdout, stderr io.Writer) int {
 	// resumable session ref for cwd (so resuming the same session re-scopes to
 	// the same registry entries), then the PRA_SESSION env carried across the
 	// tmux re-exec, then a random mint for a first-ever start. cwd is best-effort
-	// here; an error leaves the resolver to fall through to env/fallback.
+	// here; an error leaves the resolver to fall through to env/fallback. With
+	// --fresh the ref/env derivation is bypassed entirely so a brand-new id is
+	// minted, starting a clean scope that re-adopts no prior entries.
 	cwd, _ := os.Getwd()
-	session := core.ResolveScopeID(scopeRefResolver(*harnessKind, cwd), os.Getenv(core.EnvSession), genID)
+	session := core.ResolveScopeID(scopeRefResolver(*harnessKind, cwd), os.Getenv(core.EnvSession), genID, *fresh)
 
 	if !tmux.InsideTmux() {
 		return startOutsideTmux(stderr, session, *harnessKind, *launcher)
@@ -112,8 +132,9 @@ func startOutsideTmux(stderr io.Writer, session, harnessKind, launcher string) i
 		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
 		return 1
 	}
-	// Re-exec the same invocation inside the session.
-	inner := append([]string{self}, os.Args[1:]...)
+	// Re-exec the same invocation inside the session, minus --fresh: the fresh id
+	// was already minted here and is carried via PRA_SESSION below.
+	inner := append([]string{self}, stripFreshFlag(os.Args[1:])...)
 	env := map[string]string{
 		core.EnvSession:  session,
 		core.EnvHarness:  harnessKind,
