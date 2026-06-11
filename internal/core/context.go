@@ -70,17 +70,29 @@ func isSubpath(child, parent string) bool {
 // real "~" session stores.
 type ScopeRefResolver func() (ref string, ok bool)
 
-// ResolveScopeID derives the STABLE scope id that owns the orchestrator's
-// registry entries (a port of pi's resolveOrchestratorSessionId, made
-// harness-agnostic). Resolution order:
+// ResolveScopeID picks the scope id that owns the orchestrator's registry
+// entries. Starting a brand-new, clean scope is the DEFAULT; continuing an
+// existing scope is opt-in (the `--resume` flag). Resolution:
 //
-//  1. the orchestrator's real harness session ref (resolveRef): because the
-//     harness reopens the SAME session on resume, this yields the same ref and
-//     thus the same scope, so the orchestrator re-scopes to its existing
-//     entries; a genuinely fresh session yields a new ref and a new scope.
-//  2. the PRA_SESSION env var (carried across a tmux re-exec / nested process).
-//  3. a random fallback for a first-ever start with no session on disk yet.
-func ResolveScopeID(resolveRef ScopeRefResolver, env string, fallback func() string) string {
+//  1. explicitID (non-blank): continue exactly that scope (`--resume=<id>`).
+//  2. resume=false (default): a fresh fallback mint — a brand-new scope id that
+//     adopts no prior registry entries.
+//  3. resume=true: derive the STABLE scope (a port of pi's
+//     resolveOrchestratorSessionId, made harness-agnostic):
+//     a. the orchestrator's real harness session ref (resolveRef): because the
+//     harness reopens the SAME session on resume, this yields the same ref
+//     and thus the same scope, so the orchestrator re-scopes to its existing
+//     entries.
+//     b. the PRA_SESSION env var (carried across a tmux re-exec / nested
+//     process).
+//     c. a random fallback when neither is available.
+func ResolveScopeID(resolveRef ScopeRefResolver, env, explicitID string, fallback func() string, resume bool) string {
+	if id := strings.TrimSpace(explicitID); id != "" {
+		return id
+	}
+	if !resume {
+		return fallback()
+	}
 	if resolveRef != nil {
 		if ref, ok := resolveRef(); ok {
 			if r := strings.TrimSpace(ref); r != "" {

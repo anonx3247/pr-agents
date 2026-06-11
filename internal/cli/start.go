@@ -52,6 +52,53 @@ func buildOrchestratorArgv(launcher string, adapterArgs, extra []string) []strin
 	return append(argv, extra...)
 }
 
+// resumeFlag implements the --resume flag. Starting a brand-new, clean scope is
+// the DEFAULT; --resume opts INTO continuing an existing scope. It carries an
+// optional id: a bare --resume continues the carried-over/derived scope, while
+// --resume=<id> continues that explicit scope id. It is a bool-like flag (so the
+// bare form parses), and the flag package routes --resume=<id> through Set.
+type resumeFlag struct {
+	set bool   // --resume was present
+	id  string // explicit scope id from --resume=<id>, else ""
+}
+
+func (r *resumeFlag) String() string {
+	if r == nil {
+		return ""
+	}
+	return r.id
+}
+
+func (r *resumeFlag) Set(v string) error {
+	r.set = true
+	if v != "" && v != "true" {
+		r.id = v
+	}
+	return nil
+}
+
+// IsBoolFlag lets `--resume` parse without a value while still accepting the
+// `--resume=<id>` form (the flag package passes the value to Set).
+func (r *resumeFlag) IsBoolFlag() bool { return true }
+
+// rewriteResumeForReexec strips any --resume/-resume token from args and appends
+// an explicit --resume=<session>. It is used when re-execing `start` inside
+// tmux: the OUTER process already resolved the final scope id (fresh, derived,
+// or explicit) and carries it as the tmux session name + PRA_SESSION, so the
+// inner invocation must continue that EXACT id rather than re-resolving (which
+// could mint a different one). Pure.
+func rewriteResumeForReexec(args []string, session string) []string {
+	out := make([]string, 0, len(args)+1)
+	for _, a := range args {
+		if a == "-resume" || a == "--resume" ||
+			strings.HasPrefix(a, "-resume=") || strings.HasPrefix(a, "--resume=") {
+			continue
+		}
+		out = append(out, a)
+	}
+	return append(out, "--resume="+session)
+}
+
 // splitDoubleDash splits args at the first "--": before goes to flag parsing,
 // after is passthrough to the harness. When no "--" is present, all args are
 // flag args.
@@ -70,6 +117,8 @@ func runStart(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	harnessKind := fs.String("harness", os.Getenv(core.EnvHarness), "Harness adapter: pi|claude|codex")
 	launcher := fs.String("launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix before the harness args")
+	var resume resumeFlag
+	fs.Var(&resume, "resume", "Continue an existing scope instead of starting fresh (the default): bare --resume continues the carried-over/derived scope, --resume=<id> continues that explicit scope id")
 	if err := fs.Parse(flagArgs); err != nil {
 		return 2
 	}
@@ -85,13 +134,14 @@ func runStart(args []string, stdout, stderr io.Writer) int {
 		*launcher = adapter.DefaultLauncher()
 	}
 
-	// Stable scope id across resume: prefer the orchestrator harness's own
-	// resumable session ref for cwd (so resuming the same session re-scopes to
-	// the same registry entries), then the PRA_SESSION env carried across the
-	// tmux re-exec, then a random mint for a first-ever start. cwd is best-effort
-	// here; an error leaves the resolver to fall through to env/fallback.
+	// Scope id: starting a brand-new, clean scope is the DEFAULT. --resume opts
+	// into continuing an existing scope — bare --resume derives the stable scope
+	// (the orchestrator harness's own resumable session ref for cwd, then the
+	// PRA_SESSION env carried across the tmux re-exec, then a random mint), and
+	// --resume=<id> continues that explicit scope id. cwd is best-effort here; an
+	// error leaves the resolver to fall through to env/fallback.
 	cwd, _ := os.Getwd()
-	session := core.ResolveScopeID(scopeRefResolver(*harnessKind, cwd), os.Getenv(core.EnvSession), genID)
+	session := core.ResolveScopeID(scopeRefResolver(*harnessKind, cwd), os.Getenv(core.EnvSession), resume.id, genID, resume.set)
 
 	if !tmux.InsideTmux() {
 		return startOutsideTmux(stderr, session, *harnessKind, *launcher)
@@ -112,8 +162,10 @@ func startOutsideTmux(stderr io.Writer, session, harnessKind, launcher string) i
 		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
 		return 1
 	}
-	// Re-exec the same invocation inside the session.
-	inner := append([]string{self}, os.Args[1:]...)
+	// Re-exec the same invocation inside the session, forcing --resume=<session>:
+	// the scope id was already resolved here and is carried as the session name +
+	// PRA_SESSION below, so the inner process must continue that exact id.
+	inner := append([]string{self}, rewriteResumeForReexec(os.Args[1:], session)...)
 	env := map[string]string{
 		core.EnvSession:  session,
 		core.EnvHarness:  harnessKind,

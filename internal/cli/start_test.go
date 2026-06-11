@@ -30,6 +30,56 @@ func TestSplitDoubleDash(t *testing.T) {
 	}
 }
 
+func TestResumeFlag(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string // the value flag.Set passes
+		wantSet bool
+		wantID  string
+	}{
+		{"bare flag", "true", true, ""},
+		{"explicit id", "abc123", true, "abc123"},
+		{"empty value", "", true, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var r resumeFlag
+			if err := r.Set(tt.value); err != nil {
+				t.Fatalf("Set(%q) error: %v", tt.value, err)
+			}
+			if r.set != tt.wantSet || r.id != tt.wantID {
+				t.Errorf("Set(%q) = {set:%v id:%q}, want {set:%v id:%q}", tt.value, r.set, r.id, tt.wantSet, tt.wantID)
+			}
+		})
+	}
+	// Zero value: not set, no id.
+	var zero resumeFlag
+	if zero.set || zero.id != "" {
+		t.Errorf("zero value = {set:%v id:%q}, want {set:false id:\"\"}", zero.set, zero.id)
+	}
+}
+
+func TestRewriteResumeForReexec(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		session string
+		want    []string
+	}{
+		{"no resume appends explicit", []string{"start", "--harness", "pi"}, "abc", []string{"start", "--harness", "pi", "--resume=abc"}},
+		{"bare resume replaced", []string{"start", "--resume"}, "abc", []string{"start", "--resume=abc"}},
+		{"explicit resume replaced", []string{"start", "--resume=old", "--harness", "pi"}, "abc", []string{"start", "--harness", "pi", "--resume=abc"}},
+		{"single dash resume stripped", []string{"start", "-resume=old"}, "abc", []string{"start", "--resume=abc"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rewriteResumeForReexec(tt.args, tt.session); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("rewriteResumeForReexec(%#v, %q) = %#v, want %#v", tt.args, tt.session, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTmuxEnvFlags(t *testing.T) {
 	env := map[string]string{"PRA_SESSION": "s1", "PRA_HARNESS": "pi"}
 	got := tmuxEnvFlags(env)

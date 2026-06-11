@@ -153,23 +153,34 @@ func TestResolveScopeID(t *testing.T) {
 	}
 	fallback := func() string { return "RANDOM" }
 	tests := []struct {
-		name     string
-		resolver ScopeRefResolver
-		env      string
-		want     string
+		name       string
+		resolver   ScopeRefResolver
+		env        string
+		explicitID string
+		resume     bool
+		want       string
 	}{
-		{"harness ref wins over env", ref("REF", true), "ENV", "REF"},
-		{"ref trimmed", ref("  REF ", true), "ENV", "REF"},
-		{"blank ref falls through to env", ref("   ", true), "ENV", "ENV"},
-		{"ref ok=false falls through to env", ref("REF", false), "ENV", "ENV"},
-		{"nil resolver uses env", nil, "ENV", "ENV"},
-		{"env trimmed", ref("", false), "  ENV  ", "ENV"},
-		{"no ref no env uses fallback", ref("", false), "", "RANDOM"},
-		{"nil resolver empty env uses fallback", nil, "", "RANDOM"},
+		// resume=true derives the stable scope (ref → env → fallback).
+		{"resume: ref wins over env", ref("REF", true), "ENV", "", true, "REF"},
+		{"resume: ref trimmed", ref("  REF ", true), "ENV", "", true, "REF"},
+		{"resume: blank ref falls through to env", ref("   ", true), "ENV", "", true, "ENV"},
+		{"resume: ref ok=false falls through to env", ref("REF", false), "ENV", "", true, "ENV"},
+		{"resume: nil resolver uses env", nil, "ENV", "", true, "ENV"},
+		{"resume: env trimmed", ref("", false), "  ENV  ", "", true, "ENV"},
+		{"resume: no ref no env uses fallback", ref("", false), "", "", true, "RANDOM"},
+		{"resume: nil resolver empty env uses fallback", nil, "", "", true, "RANDOM"},
+		// Default (resume=false) is a FRESH mint that ignores ref + env entirely.
+		{"fresh default ignores winning ref", ref("REF", true), "ENV", "", false, "RANDOM"},
+		{"fresh default ignores env", ref("", false), "ENV", "", false, "RANDOM"},
+		{"fresh default with nil resolver", nil, "ENV", "", false, "RANDOM"},
+		// An explicit id wins over everything, in both modes, and is trimmed.
+		{"explicit id wins under resume", ref("REF", true), "ENV", "EXPLICIT", true, "EXPLICIT"},
+		{"explicit id wins under fresh default", ref("REF", true), "ENV", "EXPLICIT", false, "EXPLICIT"},
+		{"explicit id trimmed", nil, "", "  EXPLICIT  ", false, "EXPLICIT"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ResolveScopeID(tt.resolver, tt.env, fallback); got != tt.want {
+			if got := ResolveScopeID(tt.resolver, tt.env, tt.explicitID, fallback, tt.resume); got != tt.want {
 				t.Errorf("ResolveScopeID = %q, want %q", got, tt.want)
 			}
 		})
