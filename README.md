@@ -12,6 +12,18 @@ string/git/PR-state helpers), tmux layer, CLI verbs, harness adapters, and the
 per-session daemon are in place, with the pi, claude, and codex harness
 adapters. Later PRs add the interactive `select` picker.
 
+## Skill
+
+An installable agent **skill** lives under [`skills/pr-agents/`](skills/pr-agents/).
+It teaches any harness (pi, claude, codex) the full CLI-driven workflow —
+starting a session, dispatching one worker subagent per PR, monitoring/steering
+(`list`/`peek`/`send`/`stop`/`focus`), resuming, stacking, and cleanup — entirely
+through real `pr-agents <verb>` invocations (no MCP server). The orchestrator
+entry point is [`skills/pr-agents/SKILL.md`](skills/pr-agents/SKILL.md); the
+worker, stacking, and cleanup details are split into the companion
+`worker.md`, `pr-stacks.md`, and `cleanup.md` files beside it. Point your
+harness's skill loader at the `skills/` directory to install it.
+
 ## Build & test
 
 Requires Go 1.26+. Common targets (see the `Makefile`):
