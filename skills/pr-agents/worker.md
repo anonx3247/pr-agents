@@ -36,9 +36,9 @@ git commit -m "<type>: <concise description>"
 
 1. **Implement** the task, committing atomically as you go.
 2. **Verify**: run the project's tests/build/lint; fix and re-commit until green.
-3. **Simplify (if requested)**: when `mode`/dispatch opted in (`--simplify`,
-   shown as `simplify: true` in `pr-agents tool context`), simplify your diff and
-   commit it as an atomic `refactor: simplify` commit before opening the PR.
+3. **Simplify (if requested)**: when dispatch opted in (`--simplify`, shown as
+   `simplify: true` in `pr-agents tool context`), simplify your diff and commit
+   it as an atomic `refactor: simplify` commit before opening the PR.
 4. **Push and open the PR** for your `mode`:
 
    **independent** — plain GitHub PR off the base branch:
