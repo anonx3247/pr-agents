@@ -146,6 +146,22 @@ parent command (`pr-agents tool context`, `tool set-pr-number`,
 `tool mark-pushed`, `tool report-result`, `tool reply-review`). Running a moved
 verb at the top level prints a hint pointing at its `pr-agents tool …` form.
 
+## Running under a sandbox
+
+pr-agents never invokes a sandbox itself. It is sandbox-agnostic: the command
+used to spawn each harness is a configurable PREFIX (the **launcher**), and a
+sandbox is layered on by overriding ONLY that prefix — e.g.
+`--launcher "isara claude run --"` or `--launcher "asb --profile git -- codex"`.
+Every orchestrator and worker pane is re-launched through the same prefix, so a
+fresh sandbox is re-imposed per pane rather than inherited. Because sandboxes
+filter environment variables across the launch boundary, workers resolve their
+identity from `cwd → registry` (`pr-agents tool context`) rather than from env,
+so a launcher wrapper can stay trivial.
+
+See [docs/sandboxed-launchers.md](docs/sandboxed-launchers.md) for the full
+model, per-harness instruction-injection notes, and copy-paste examples
+(ready-made wrappers live in [`examples/launchers/`](examples/launchers/)).
+
 ## State & configuration
 
 - **Shared registry** — dispatched PRs are tracked in
