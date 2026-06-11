@@ -185,8 +185,13 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.stackOn, "stack-on", "", "PR id/branch to stack on (stack/graphite)")
 	fs.StringVar(&o.branch, "branch", "", "Override the working branch name")
 	fs.BoolVar(&o.simplify, "simplify", false, "Ask the worker to simplify its diff before opening")
-	fs.StringVar(&o.harness, "harness", os.Getenv(core.EnvHarness), "Harness adapter: pi|claude|codex")
-	fs.StringVar(&o.launcher, "launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix before the harness args")
+	// Default the flags to "" (NOT os.Getenv) so an explicitly-passed flag is
+	// distinguishable from an unset one. The full precedence — flag > env >
+	// persisted session record > final fallback — is applied below once the
+	// session is resolved, so the record can be consulted when a sandbox launcher
+	// has stripped the PRA_* env vars.
+	fs.StringVar(&o.harness, "harness", "", "Harness adapter: pi|claude|codex")
+	fs.StringVar(&o.launcher, "launcher", "", "Launch-command prefix before the harness args")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -212,18 +217,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if o.harness == "" {
-		o.harness = "pi"
-	}
-	adapter, err := harness.Get(o.harness)
-	if err != nil {
-		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
-		return 1
-	}
-	if o.launcher == "" {
-		o.launcher = adapter.DefaultLauncher()
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
@@ -233,6 +226,31 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
+	}
+
+	// Resolve harness + launcher with precedence: explicit flag > PRA_* env >
+	// persisted session record > final fallback. The record (on disk, which
+	// crosses the sandbox boundary) recovers the orchestrator's choice when a
+	// sandbox launcher has stripped the env vars before the orchestrator shelled
+	// out to dispatch — otherwise a claude/codex fleet would silently spawn pi
+	// workers AND escape the sandbox via the bare default launcher.
+	session := resolveSession(all, cwd)
+	var rec core.SessionRecord
+	if r, ok, _ := core.LoadSessionRecord(cwd, session); ok {
+		rec = r
+	}
+	o.harness = core.ResolveFromSources(o.harness, os.Getenv(core.EnvHarness), rec.Harness)
+	if o.harness == "" {
+		o.harness = "pi"
+	}
+	adapter, err := harness.Get(o.harness)
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
+		return 1
+	}
+	o.launcher = core.ResolveFromSources(o.launcher, os.Getenv(core.EnvLauncher), rec.Launcher)
+	if o.launcher == "" {
+		o.launcher = adapter.DefaultLauncher()
 	}
 
 	// Depth enforcement via cwd→registry: a worker recovers its own depth from
@@ -253,7 +271,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
 	}
-	session := resolveSession(all, cwd)
 
 	plan, err := planDispatch(o, all, session,
 		func() (string, error) { return core.DefaultBranch(root) },

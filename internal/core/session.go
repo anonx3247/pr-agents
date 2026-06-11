@@ -18,6 +18,20 @@ type SessionRecord struct {
 	Launcher string `json:"launcher,omitempty"`
 }
 
+// ResolveFromSources returns the first non-empty value among flag (an
+// explicitly-passed CLI flag), env (the PRA_* env var), and record (the value
+// from the persisted session record), in that precedence order. It returns ""
+// when all three are empty, leaving the final harness-specific fallback (e.g.
+// "pi" / adapter.DefaultLauncher()) to the caller. Pure.
+func ResolveFromSources(flag, env, record string) string {
+	for _, v := range []string{flag, env, record} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // SessionsPath returns the per-session-records file,
 // <git-common-dir>/.pr-agents/sessions.json, creating the parent dir. It lives
 // next to the registry so the same disk channel that survives the sandbox

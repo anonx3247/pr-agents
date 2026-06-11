@@ -106,6 +106,29 @@ func TestLoadSessionRecordGarbage(t *testing.T) {
 	}
 }
 
+func TestResolveFromSources(t *testing.T) {
+	cases := []struct {
+		name              string
+		flag, env, record string
+		want              string
+	}{
+		{"flag wins over all", "claude", "codex", "pi", "claude"},
+		{"env wins when no flag", "", "codex", "pi", "codex"},
+		{"record used when flag+env empty", "", "", "claude", "claude"},
+		{"all empty falls through to caller", "", "", "", ""},
+		{"flag wins even when others empty", "pi", "", "", "pi"},
+		{"record skipped when env set", "", "codex", "claude", "codex"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ResolveFromSources(c.flag, c.env, c.record); got != c.want {
+				t.Errorf("ResolveFromSources(%q,%q,%q) = %q, want %q",
+					c.flag, c.env, c.record, got, c.want)
+			}
+		})
+	}
+}
+
 func TestSessionsPathLocation(t *testing.T) {
 	dir := initRepo(t)
 	path, err := SessionsPath(dir)

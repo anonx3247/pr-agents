@@ -212,6 +212,13 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 		spec.InstructionsText = instructions
 	}
 
+	// Persist a durable session record BEFORE exec'ing the orchestrator (this
+	// process still runs OUTSIDE the sandbox). The PRA_* env vars below help the
+	// non-sandboxed path, but a sandbox launcher strips them before the
+	// orchestrator shells out to dispatch; the on-disk record (which crosses the
+	// sandbox boundary via the mounted repo) is the durable fallback. Best-effort.
+	_ = core.SaveSessionRecord(cwd, session, core.SessionRecord{Harness: harnessKind, Launcher: launcher})
+
 	// Carry the PRA_* contract to the orchestrator process so dispatch reads it.
 	os.Setenv(core.EnvSession, session)
 	os.Setenv(core.EnvHarness, harnessKind)
