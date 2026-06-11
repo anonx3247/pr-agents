@@ -111,15 +111,17 @@ pr-agents resume
 
 It ports pi's `reviveDeadAgents` harness-agnostically:
 
-- **Stable scope id** — `core.ResolveScopeID` derives the scope that owns the
-  registry entries: the orchestrator's real harness session ref
-  (`harness.Get(kind).SessionRef(mainRepoCwd, …)`) wins, then `PRA_SESSION`,
-  then a random mint. Because the harness reopens the SAME session on resume,
-  the ref — and thus the scope — is stable, so the orchestrator re-scopes to its
-  existing entries; a fresh session yields a new scope. `start` and the
-  registry-scoping verbs resolve the scope the same way. Pass `pr-agents start
-  --fresh` to BYPASS this derivation and force a brand-new random scope id, so
-  the session starts a clean scope that adopts no prior registry entries.
+- **Scope id** — `core.ResolveScopeID` picks the scope that owns the registry
+  entries. Starting a brand-new, clean scope is the DEFAULT (`pr-agents start`
+  mints a fresh random id that adopts no prior entries). Pass `pr-agents start
+  --resume` to instead CONTINUE an existing scope by deriving the stable id: the
+  orchestrator's real harness session ref (`harness.Get(kind)
+  .SessionRef(mainRepoCwd, …)`) wins, then `PRA_SESSION`, then a random mint.
+  Because the harness reopens the SAME session on resume, the ref — and thus the
+  scope — is stable, so `--resume` re-scopes to the existing entries. Pass
+  `pr-agents start --resume=<id>` to continue a specific scope id. The
+  registry-scoping verbs and the `pr-agents resume` verb always derive the
+  existing scope (they never start fresh).
 - **Revive selection** — `core.SelectRevivableAgents` picks the depth-1 workers
   that are non-terminal, whose tmux pane is DEAD, whose worktree still EXISTS,
   and which carry a usable `WorkerSessionRef`. It is pure (pane/worktree/session

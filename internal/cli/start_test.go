@@ -30,23 +30,51 @@ func TestSplitDoubleDash(t *testing.T) {
 	}
 }
 
-func TestStripFreshFlag(t *testing.T) {
+func TestResumeFlag(t *testing.T) {
 	tests := []struct {
-		name string
-		args []string
-		want []string
+		name    string
+		value   string // the value flag.Set passes
+		wantSet bool
+		wantID  string
 	}{
-		{"no fresh", []string{"start", "--harness", "pi"}, []string{"start", "--harness", "pi"}},
-		{"double dash fresh", []string{"start", "--fresh", "--harness", "pi"}, []string{"start", "--harness", "pi"}},
-		{"single dash fresh", []string{"start", "-fresh"}, []string{"start"}},
-		{"fresh with value", []string{"start", "--fresh=true"}, []string{"start"}},
-		{"single dash fresh with value", []string{"start", "-fresh=false"}, []string{"start"}},
-		{"not a flag named freshly", []string{"start", "--freshly"}, []string{"start", "--freshly"}},
+		{"bare flag", "true", true, ""},
+		{"explicit id", "abc123", true, "abc123"},
+		{"empty value", "", true, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := stripFreshFlag(tt.args); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("stripFreshFlag(%#v) = %#v, want %#v", tt.args, got, tt.want)
+			var r resumeFlag
+			if err := r.Set(tt.value); err != nil {
+				t.Fatalf("Set(%q) error: %v", tt.value, err)
+			}
+			if r.set != tt.wantSet || r.id != tt.wantID {
+				t.Errorf("Set(%q) = {set:%v id:%q}, want {set:%v id:%q}", tt.value, r.set, r.id, tt.wantSet, tt.wantID)
+			}
+		})
+	}
+	// Zero value: not set, no id.
+	var zero resumeFlag
+	if zero.set || zero.id != "" {
+		t.Errorf("zero value = {set:%v id:%q}, want {set:false id:\"\"}", zero.set, zero.id)
+	}
+}
+
+func TestRewriteResumeForReexec(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		session string
+		want    []string
+	}{
+		{"no resume appends explicit", []string{"start", "--harness", "pi"}, "abc", []string{"start", "--harness", "pi", "--resume=abc"}},
+		{"bare resume replaced", []string{"start", "--resume"}, "abc", []string{"start", "--resume=abc"}},
+		{"explicit resume replaced", []string{"start", "--resume=old", "--harness", "pi"}, "abc", []string{"start", "--harness", "pi", "--resume=abc"}},
+		{"single dash resume stripped", []string{"start", "-resume=old"}, "abc", []string{"start", "--resume=abc"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rewriteResumeForReexec(tt.args, tt.session); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("rewriteResumeForReexec(%#v, %q) = %#v, want %#v", tt.args, tt.session, got, tt.want)
 			}
 		})
 	}
