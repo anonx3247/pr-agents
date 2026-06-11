@@ -10,7 +10,7 @@ state, CI, and reviews.
 Status: early scaffolding. The Go module, core domain (registry, config,
 string/git/PR-state helpers), tmux layer, CLI verbs, harness adapters, and the
 per-session daemon are in place, with the pi, claude, and codex harness
-adapters. Later PRs add the interactive `select` picker.
+adapters, including the interactive `select` picker.
 
 ## Skill
 
@@ -157,6 +157,12 @@ top-level; the agent-only worker-plumbing verbs are namespaced under a `tool`
 parent command (`pr-agents tool context`, `tool set-pr-number`,
 `tool mark-pushed`, `tool report-result`, `tool reply-review`). Running a moved
 verb at the top level prints a hint pointing at its `pr-agents tool …` form.
+
+`pr-agents select` is an interactive picker: it lists the live PR-agent panes,
+reads a numbered choice from stdin, and focuses the chosen pane. Bind it to a
+tmux key for one-keystroke pane-hopping, e.g.
+`bind-key g display-popup -E pr-agents select`, or run
+`tmux display-popup -E pr-agents select` directly.
 
 ## Running under a sandbox
 
