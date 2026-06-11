@@ -22,7 +22,7 @@ explicit identity flags below — they carry your session, harness, and launcher
 to the worker across any sandbox boundary (env vars do not survive it):
 
 ```
-pr-agents dispatch --session {{.Session}} --harness {{.Harness}} --launcher "{{.Launcher}}" \
+pr-agents dispatch --session {{.Session}} --harness {{.Harness}} --launcher "{{.Launcher}}" --tmux-socket "{{.TmuxSocket}}" \
   --name "<short PR title>" --task "<full self-contained instructions>" \
   [--mode independent|stack|graphite] [--base <branch>] [--stack-on <id|branch>] [--simplify]
 ```

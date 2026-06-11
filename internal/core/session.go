@@ -17,6 +17,25 @@ import (
 type SessionRecord struct {
 	Harness  string `json:"harness,omitempty"`
 	Launcher string `json:"launcher,omitempty"`
+	// TmuxSocket is the orchestrator's tmux server socket path, derived from the
+	// real $TMUX value OUTSIDE the sandbox. A sandbox launcher strips $TMUX, so a
+	// sandboxed dispatch cannot locate the tmux server; the persisted socket lets
+	// it talk to the same server via `tmux -S <socket>`.
+	TmuxSocket string `json:"tmuxSocket,omitempty"`
+}
+
+// TmuxSocketFromEnv extracts the tmux server socket path from a $TMUX value.
+// tmux sets $TMUX to a comma-separated triple `<socket>,<pid>,<session>`; the
+// socket is the substring before the first comma. Returns "" for an empty or
+// comma-leading (malformed) value. Pure.
+func TmuxSocketFromEnv(tmuxVal string) string {
+	if tmuxVal == "" {
+		return ""
+	}
+	if i := strings.IndexByte(tmuxVal, ','); i >= 0 {
+		return tmuxVal[:i]
+	}
+	return tmuxVal
 }
 
 // prAgentsFile resolves <git-common-dir>/.pr-agents/<name>, creating the parent

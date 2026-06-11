@@ -17,18 +17,47 @@ import (
 // tmuxTimeout bounds every tmux invocation so a hung tmux never blocks the CLI.
 const tmuxTimeout = 10 * time.Second
 
-// InsideTmux reports whether the current process is running inside a tmux
-// session (the TMUX env var is set by tmux for every pane).
+// socket is the explicit tmux server socket path. It is configured once per
+// process via SetSocket when the orchestrator's real socket has been resolved
+// from a channel that survives the sandbox boundary (a --tmux-socket flag or the
+// on-disk session record), because a sandbox launcher strips $TMUX and a
+// sandboxed tmux client otherwise cannot locate the server. When set, every
+// tmux invocation is prefixed with `-S <socket>` so it targets that server.
+var socket string
+
+// SetSocket configures the explicit tmux server socket path used by all
+// subsequent tmux invocations (prepended as the global `-S <socket>` flag). An
+// empty path clears it (tmux then falls back to $TMUX / the default socket).
+func SetSocket(path string) { socket = path }
+
+// Socket returns the configured explicit tmux socket path, or "" when none.
+func Socket() string { return socket }
+
+// socketArgs prepends the global `-S <socket>` flag (which MUST precede the
+// subcommand) when sock is non-empty, leaving args untouched otherwise. Pure.
+func socketArgs(sock string, args []string) []string {
+	if sock == "" {
+		return args
+	}
+	return append([]string{"-S", sock}, args...)
+}
+
+// InsideTmux reports whether tmux is reachable: either the current process is
+// running inside a tmux session ($TMUX is set) OR an explicit server socket has
+// been configured (e.g. recovered across a sandbox boundary that stripped
+// $TMUX). The latter lets a sandboxed dispatch proceed past this guard and talk
+// to the orchestrator's server via `tmux -S <socket>`.
 func InsideTmux() bool {
-	return os.Getenv("TMUX") != ""
+	return os.Getenv("TMUX") != "" || socket != ""
 }
 
 // Tmux runs `tmux args...` (bounded by tmuxTimeout) and returns trimmed stdout,
-// or an error.
+// or an error. When an explicit socket is configured it is prepended as
+// `-S <socket>` so the call targets that server.
 func Tmux(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "tmux", args...)
+	cmd := exec.CommandContext(ctx, "tmux", socketArgs(socket, args)...)
 	out, err := cmd.Output()
 	return strings.TrimSpace(string(out)), err
 }

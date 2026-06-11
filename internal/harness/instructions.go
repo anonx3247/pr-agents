@@ -31,6 +31,10 @@ type InstructionData struct {
 	Session  string
 	Harness  string
 	Launcher string
+	// TmuxSocket is the orchestrator's tmux server socket path, templated into the
+	// dispatch command so a sandboxed dispatch (where $TMUX is stripped) can reach
+	// the same server via `tmux -S <socket>`. Only the orchestrator template uses it.
+	TmuxSocket string
 }
 
 // templateFor maps a role to its embedded template file name.
