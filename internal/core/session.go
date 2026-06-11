@@ -19,16 +19,11 @@ type SessionRecord struct {
 	Launcher string `json:"launcher,omitempty"`
 }
 
-// currentSessionFile is the marker file holding the most recent orchestrator
-// session id for this checkout, so env-less verbs (list/resume/cleanup) run by
-// a sandboxed orchestrator still resolve the REAL session id rather than a
-// harness-ref re-derivation that misses the stripped PRA_HARNESS. It lives
-// beside the registry and crosses the sandbox boundary the same way.
-const currentSessionFile = "current-session"
-
-// CurrentSessionPath returns <git-common-dir>/.pr-agents/current-session,
-// creating the parent dir.
-func CurrentSessionPath(cwd string) (string, error) {
+// prAgentsFile resolves <git-common-dir>/.pr-agents/<name>, creating the parent
+// dir. It is the shared path resolver for the session record + marker files,
+// which live beside the registry so the same mounted-repo disk channel carries
+// them across a sandbox boundary.
+func prAgentsFile(cwd, name string) (string, error) {
 	commonDir, err := GitCommonDir(cwd)
 	if err != nil {
 		return "", err
@@ -37,25 +32,18 @@ func CurrentSessionPath(cwd string) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, currentSessionFile), nil
+	return filepath.Join(dir, name), nil
 }
 
-// SaveCurrentSession records sessionID as the checkout's current orchestrator
-// session (atomic temp file + rename). A no-op for an empty id.
-func SaveCurrentSession(cwd, sessionID string) error {
-	if sessionID == "" {
-		return nil
-	}
-	path, err := CurrentSessionPath(cwd)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".current-session-*.tmp")
+// atomicWriteFile writes data to path atomically: a temp file in the same dir,
+// then a rename over the target, so a reader never sees a partial file.
+func atomicWriteFile(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
-	if _, err := tmp.WriteString(sessionID); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)
 		return err
@@ -69,6 +57,32 @@ func SaveCurrentSession(cwd, sessionID string) error {
 		return err
 	}
 	return nil
+}
+
+// currentSessionFile is the marker file holding the most recent orchestrator
+// session id for this checkout, so env-less verbs (list/resume/cleanup) run by
+// a sandboxed orchestrator still resolve the REAL session id rather than a
+// harness-ref re-derivation that misses the stripped PRA_HARNESS. It lives
+// beside the registry and crosses the sandbox boundary the same way.
+const currentSessionFile = "current-session"
+
+// CurrentSessionPath returns <git-common-dir>/.pr-agents/current-session,
+// creating the parent dir.
+func CurrentSessionPath(cwd string) (string, error) {
+	return prAgentsFile(cwd, currentSessionFile)
+}
+
+// SaveCurrentSession records sessionID as the checkout's current orchestrator
+// session (atomic temp file + rename). A no-op for an empty id.
+func SaveCurrentSession(cwd, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	path, err := CurrentSessionPath(cwd)
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(path, []byte(sessionID))
 }
 
 // LoadCurrentSession returns the checkout's recorded current orchestrator
@@ -104,15 +118,7 @@ func ResolveFromSources(flag, env, record string) string {
 // next to the registry so the same disk channel that survives the sandbox
 // boundary carries it.
 func SessionsPath(cwd string) (string, error) {
-	commonDir, err := GitCommonDir(cwd)
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(commonDir, ".pr-agents")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "sessions.json"), nil
+	return prAgentsFile(cwd, "sessions.json")
 }
 
 // loadSessions reads the sessions map, returning an empty map when the file is
@@ -183,23 +189,5 @@ func SaveSessionRecord(cwd, sessionID string, rec SessionRecord) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".sessions-*.json.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
-	return nil
+	return atomicWriteFile(path, data)
 }
