@@ -117,7 +117,9 @@ It ports pi's `reviveDeadAgents` harness-agnostically:
   then a random mint. Because the harness reopens the SAME session on resume,
   the ref — and thus the scope — is stable, so the orchestrator re-scopes to its
   existing entries; a fresh session yields a new scope. `start` and the
-  registry-scoping verbs resolve the scope the same way.
+  registry-scoping verbs resolve the scope the same way. Pass `pr-agents start
+  --fresh` to BYPASS this derivation and force a brand-new random scope id, so
+  the session starts a clean scope that adopts no prior registry entries.
 - **Revive selection** — `core.SelectRevivableAgents` picks the depth-1 workers
   that are non-terminal, whose tmux pane is DEAD, whose worktree still EXISTS,
   and which carry a usable `WorkerSessionRef`. It is pure (pane/worktree/session
