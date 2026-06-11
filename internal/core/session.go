@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // SessionRecord is the durable, on-disk record of an orchestrator session's
@@ -16,6 +17,72 @@ import (
 type SessionRecord struct {
 	Harness  string `json:"harness,omitempty"`
 	Launcher string `json:"launcher,omitempty"`
+}
+
+// currentSessionFile is the marker file holding the most recent orchestrator
+// session id for this checkout, so env-less verbs (list/resume/cleanup) run by
+// a sandboxed orchestrator still resolve the REAL session id rather than a
+// harness-ref re-derivation that misses the stripped PRA_HARNESS. It lives
+// beside the registry and crosses the sandbox boundary the same way.
+const currentSessionFile = "current-session"
+
+// CurrentSessionPath returns <git-common-dir>/.pr-agents/current-session,
+// creating the parent dir.
+func CurrentSessionPath(cwd string) (string, error) {
+	commonDir, err := GitCommonDir(cwd)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(commonDir, ".pr-agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, currentSessionFile), nil
+}
+
+// SaveCurrentSession records sessionID as the checkout's current orchestrator
+// session (atomic temp file + rename). A no-op for an empty id.
+func SaveCurrentSession(cwd, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	path, err := CurrentSessionPath(cwd)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".current-session-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString(sessionID); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
+// LoadCurrentSession returns the checkout's recorded current orchestrator
+// session id, or "" when the marker is missing or unreadable. Tolerant.
+func LoadCurrentSession(cwd string) string {
+	path, err := CurrentSessionPath(cwd)
+	if err != nil {
+		return ""
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 // ResolveFromSources returns the first non-empty value among flag (an

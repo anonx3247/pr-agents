@@ -106,6 +106,40 @@ func TestLoadSessionRecordGarbage(t *testing.T) {
 	}
 }
 
+func TestCurrentSessionRoundTrip(t *testing.T) {
+	dir := initRepo(t)
+	if got := LoadCurrentSession(dir); got != "" {
+		t.Errorf("missing marker should be empty, got %q", got)
+	}
+	if err := SaveCurrentSession(dir, "S_real"); err != nil {
+		t.Fatalf("SaveCurrentSession: %v", err)
+	}
+	if got := LoadCurrentSession(dir); got != "S_real" {
+		t.Errorf("LoadCurrentSession = %q, want S_real", got)
+	}
+	// Last writer wins.
+	if err := SaveCurrentSession(dir, "S_two"); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadCurrentSession(dir); got != "S_two" {
+		t.Errorf("LoadCurrentSession = %q, want S_two", got)
+	}
+}
+
+func TestSaveCurrentSessionEmptyNoOp(t *testing.T) {
+	dir := initRepo(t)
+	if err := SaveCurrentSession(dir, ""); err != nil {
+		t.Fatalf("SaveCurrentSession empty: %v", err)
+	}
+	path, err := CurrentSessionPath(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Errorf("expected no marker file for empty id")
+	}
+}
+
 func TestResolveFromSources(t *testing.T) {
 	cases := []struct {
 		name              string
