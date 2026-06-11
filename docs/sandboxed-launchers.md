@@ -93,19 +93,48 @@ sees none of them still resolves its identity from the cwd.
 
 There is one further twist when the **orchestrator itself** runs under a sandbox
 launcher (e.g. `--launcher "isara claude run"` or `asb --profile git -- claude`):
-the sandbox strips `PRA_HARNESS`/`PRA_LAUNCHER` before the sandboxed orchestrator
-shells out to `pr-agents dispatch`. Env alone would then leave dispatch defaulting
-the worker harness to `pi` and the launcher to the bare adapter default — silently
-spawning the wrong fleet AND escaping the sandbox (panes launched without the
-wrapper prefix). To survive this, `start` persists the resolved harness + launcher
-to a durable on-disk record at `<git-common-dir>/.pr-agents/sessions.json`, keyed
-by session id, BEFORE it execs the orchestrator (that process still runs outside
-the sandbox). Disk crosses the sandbox boundary via the mounted repo, exactly like
-the registry. `dispatch` and `resume` then resolve harness/launcher with the
-precedence **explicit `--harness`/`--launcher` flag > `PRA_*` env > persisted
-session record > final fallback (`pi` / adapter default launcher)**, looking up the
-record via `cwd → git-common-dir → session`. The env vars are still written (they
-help the non-sandboxed path); the record is the durable fallback.
+the sandbox strips `PRA_SESSION`/`PRA_HARNESS`/`PRA_LAUNCHER` before the sandboxed
+orchestrator shells out to `pr-agents dispatch`. Env alone would then leave
+dispatch unable to recompute the orchestrator's session id (its `cwd→registry`
+fallback re-derives a *different* id from a harness ref, missing the stripped
+`PRA_HARNESS`), so worker entries get filed under the wrong session and the daemon
+— launched with the real id — never sees them. It would also default the worker
+harness to `pi` and the launcher to the bare adapter default, silently spawning
+the wrong fleet AND escaping the sandbox (panes launched without the wrapper
+prefix).
+
+The fix carries the orchestrator's identity through the **same channel that DOES
+cross the boundary as the injected system prompt: argv/instructions.** Running
+OUTSIDE the sandbox, `start` knows the REAL `session`, `harness`, and `launcher`,
+and it templates the concrete dispatch command into the orchestrator's role
+instructions (via `harness.Instructions` → `InstructionData`):
+
+```
+pr-agents dispatch --session <session> --harness <harness> --launcher "<launcher>" \
+  --name "..." --task "..." [--mode ...] [--simplify]
+```
+
+For pi/claude these instructions ride in on `--append-system-prompt`; for codex
+in the `AGENTS.md` written into the worktree — both cross the sandbox boundary as
+text. So the orchestrator always dispatches with its explicit identity. `dispatch`
+resolves the session with precedence **`--session` flag > `PRA_SESSION` env >
+cwd-derived fallback**, and harness/launcher with **explicit flag > `PRA_*` env >
+persisted session record > final fallback (`pi` / adapter default launcher)**.
+
+Two on-disk records under `<git-common-dir>/.pr-agents/` back this up as the
+AUTOMATIC FALLBACK for env-less verbs the orchestrator runs WITHOUT the flags
+(e.g. an ad-hoc `list`/`resume`/`cleanup`), written by `start` before it execs
+the orchestrator (still outside the sandbox) and crossing the boundary via the
+mounted repo exactly like the registry:
+
+- `sessions.json` — keyed by session id, holds `{harness, launcher}`, consulted
+  by `dispatch`/`resume` when the flags and env are both absent.
+- `current-session` — the checkout's most recent orchestrator session id, so
+  `resolveSession` recovers the REAL scope (instead of the harness-ref
+  re-derivation) for those env-less verbs.
+
+The env vars are still written (they help the non-sandboxed path); the argv flags
+are the primary channel and the records are the durable fallback.
 
 The practical consequence for a launcher wrapper: it can be trivial. It does not
 need to thread any pr-agents state through the sandbox. It only has to run the
