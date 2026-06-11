@@ -239,3 +239,74 @@ func TestDispatchPaneEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveHarnessLauncher(t *testing.T) {
+	cases := []struct {
+		name                      string
+		flagH, flagL, envH, envL  string
+		rec                       core.SessionRecord
+		wantHarness, wantLauncher string
+	}{
+		{
+			name:         "all empty falls back to pi + default launcher",
+			wantHarness:  "pi",
+			wantLauncher: "pi",
+		},
+		{
+			name:         "env-stripped sandbox recovers from record",
+			rec:          core.SessionRecord{Harness: "claude", Launcher: "isara claude run"},
+			wantHarness:  "claude",
+			wantLauncher: "isara claude run",
+		},
+		{
+			name:         "env wins over record",
+			envH:         "codex",
+			envL:         "asb -- codex",
+			rec:          core.SessionRecord{Harness: "claude", Launcher: "isara claude run"},
+			wantHarness:  "codex",
+			wantLauncher: "asb -- codex",
+		},
+		{
+			name:         "explicit flags win over env and record",
+			flagH:        "claude",
+			flagL:        "wrap claude",
+			envH:         "codex",
+			envL:         "asb -- codex",
+			rec:          core.SessionRecord{Harness: "pi", Launcher: "pi"},
+			wantHarness:  "claude",
+			wantLauncher: "wrap claude",
+		},
+		{
+			name:         "record harness with no launcher falls back to that adapter default",
+			rec:          core.SessionRecord{Harness: "codex"},
+			wantHarness:  "codex",
+			wantLauncher: "codex",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h, l, a, err := resolveHarnessLauncher(c.flagH, c.flagL, c.envH, c.envL, c.rec)
+			if err != nil {
+				t.Fatalf("resolveHarnessLauncher: %v", err)
+			}
+			if h != c.wantHarness || l != c.wantLauncher {
+				t.Errorf("got harness=%q launcher=%q, want %q/%q", h, l, c.wantHarness, c.wantLauncher)
+			}
+			if a == nil {
+				t.Errorf("expected non-nil adapter")
+			}
+		})
+	}
+}
+
+func TestResolveDispatchSession(t *testing.T) {
+	// Explicit --session wins even when the cwd fallback would derive a wrong id
+	// from a stripped env (the sandbox case).
+	if got := resolveDispatchSession("S_real", func() string { return "S_pi" }); got != "S_real" {
+		t.Errorf("flag should win: got %q want S_real", got)
+	}
+	// With no flag, fall back to the cwd-derived id.
+	if got := resolveDispatchSession("", func() string { return "S_fallback" }); got != "S_fallback" {
+		t.Errorf("empty flag should use fallback: got %q want S_fallback", got)
+	}
+}

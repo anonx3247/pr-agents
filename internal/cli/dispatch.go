@@ -27,6 +27,7 @@ type dispatchOpts struct {
 	simplify bool
 	harness  string
 	launcher string
+	session  string
 }
 
 // dispatchPlan is the resolved branch/base/mode for a dispatch, computed purely
@@ -150,6 +151,41 @@ func dispatchPaneEnv(session, harnessKind, launcher string) map[string]string {
 	}
 }
 
+// resolveDispatchSession picks the session id that owns a dispatched entry: the
+// explicit --session flag (injected into the orchestrator instructions by
+// `start`, which carries it across the sandbox boundary via argv/text) when set,
+// else the cwd-derived fallback (PRA_SESSION env > owning entry > current-session
+// marker > harness ref). The flag is primary so a stripped env never misfiles an
+// entry under a wrong, harness-ref-derived id. Pure given fallback.
+func resolveDispatchSession(flagSession string, fallback func() string) string {
+	if flagSession != "" {
+		return flagSession
+	}
+	return fallback()
+}
+
+// resolveHarnessLauncher applies the dispatch precedence — explicit flag > env >
+// persisted session record > final fallback — to the harness kind and launcher
+// prefix, returning the chosen adapter. The harness falls back to "pi" and the
+// launcher to the adapter's DefaultLauncher() when every source is empty. It is
+// the single source of truth so an env-stripped sandbox dispatch still recovers
+// the orchestrator's choice from the record. Pure given the harness registry.
+func resolveHarnessLauncher(flagH, flagL, envH, envL string, rec core.SessionRecord) (harnessKind, launcher string, a harness.Adapter, err error) {
+	harnessKind = core.ResolveFromSources(flagH, envH, rec.Harness)
+	if harnessKind == "" {
+		harnessKind = "pi"
+	}
+	a, err = harness.Get(harnessKind)
+	if err != nil {
+		return harnessKind, "", nil, err
+	}
+	launcher = core.ResolveFromSources(flagL, envL, rec.Launcher)
+	if launcher == "" {
+		launcher = a.DefaultLauncher()
+	}
+	return harnessKind, launcher, a, nil
+}
+
 // removeEntryByID returns entries with any entry matching id removed. Pure.
 func removeEntryByID(entries []core.PrEntry, id string) []core.PrEntry {
 	out := make([]core.PrEntry, 0, len(entries))
@@ -185,8 +221,18 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.stackOn, "stack-on", "", "PR id/branch to stack on (stack/graphite)")
 	fs.StringVar(&o.branch, "branch", "", "Override the working branch name")
 	fs.BoolVar(&o.simplify, "simplify", false, "Ask the worker to simplify its diff before opening")
-	fs.StringVar(&o.harness, "harness", os.Getenv(core.EnvHarness), "Harness adapter: pi|claude|codex")
-	fs.StringVar(&o.launcher, "launcher", os.Getenv(core.EnvLauncher), "Launch-command prefix before the harness args")
+	// Default the flags to "" (NOT os.Getenv) so an explicitly-passed flag is
+	// distinguishable from an unset one. The full precedence — flag > env >
+	// persisted session record > final fallback — is applied below once the
+	// session is resolved, so the record can be consulted when a sandbox launcher
+	// has stripped the PRA_* env vars.
+	fs.StringVar(&o.harness, "harness", "", "Harness adapter: pi|claude|codex")
+	fs.StringVar(&o.launcher, "launcher", "", "Launch-command prefix before the harness args")
+	// --session carries the orchestrator's REAL session id across the sandbox
+	// boundary (env is stripped). The orchestrator instructions templated by
+	// `start` always pass it; precedence is --session flag > PRA_SESSION env >
+	// cwd-derived fallback.
+	fs.StringVar(&o.session, "session", "", "Orchestrator session id that owns this entry")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -212,24 +258,28 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if o.harness == "" {
-		o.harness = "pi"
-	}
-	adapter, err := harness.Get(o.harness)
-	if err != nil {
-		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
-		return 1
-	}
-	if o.launcher == "" {
-		o.launcher = adapter.DefaultLauncher()
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
 	}
 	all, err := core.LoadRegistry(cwd)
+	if err != nil {
+		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
+		return 1
+	}
+
+	// Resolve harness + launcher with precedence: explicit flag > PRA_* env >
+	// persisted session record > final fallback. The record (on disk, which
+	// crosses the sandbox boundary) recovers the orchestrator's choice when a
+	// sandbox launcher has stripped the env vars before the orchestrator shelled
+	// out to dispatch — otherwise a claude/codex fleet would silently spawn pi
+	// workers AND escape the sandbox via the bare default launcher.
+	session := resolveDispatchSession(o.session, func() string { return resolveSession(all, cwd) })
+	rec := core.SessionRecordFor(cwd, session)
+	var adapter harness.Adapter
+	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(
+		o.harness, o.launcher, os.Getenv(core.EnvHarness), os.Getenv(core.EnvLauncher), rec)
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
@@ -253,7 +303,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pr-agents dispatch: %v\n", err)
 		return 1
 	}
-	session := resolveSession(all, cwd)
 
 	plan, err := planDispatch(o, all, session,
 		func() (string, error) { return core.DefaultBranch(root) },

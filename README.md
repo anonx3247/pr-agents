@@ -201,4 +201,19 @@ model, per-harness instruction-injection notes, and copy-paste examples
   (`core.DepthFromCwd`): 0 = orchestrator (the main repo, outside any
   worktree), 1 = PR subagent, 2 = helper. The only env vars carried across
   harness processes are the orchestrator-side `PRA_SESSION`, `PRA_HARNESS`, and
-  `PRA_LAUNCHER`, set by `start` and read by `dispatch`/`daemon`.
+  `PRA_LAUNCHER`, set by `start` and read by `dispatch`/`daemon`. Because a
+  sandbox launcher strips even those when the orchestrator itself is sandboxed,
+  the orchestrator's identity is primarily carried to `dispatch` via the
+  **injected role instructions/argv** (which cross the sandbox boundary like the
+  system prompt): `start` runs outside the sandbox, knows the real
+  session/harness/launcher, and templates the concrete
+  `pr-agents dispatch --session … --harness … --launcher "…"` command into the
+  orchestrator instructions. As an automatic fallback for env-less verbs the
+  orchestrator runs without those flags, `start` also persists two durable
+  records under `<git-common-dir>/.pr-agents/` (atomic temp file + rename):
+  `sessions.json` (keyed by session id → `{harness, launcher}`) and
+  `current-session` (the checkout's real orchestrator session id). `dispatch`
+  resolves the session with precedence flag > env > cwd-derived fallback, and
+  harness/launcher with flag > env > session record > fallback, so a sandboxed
+  dispatch never misfiles entries, silently spawns the wrong fleet, or escapes
+  the sandbox.

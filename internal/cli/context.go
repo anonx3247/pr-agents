@@ -38,9 +38,18 @@ func resolveSession(entries []core.PrEntry, cwd string) string {
 	if e := core.ResolveContextFromCwd(entries, cwd); e != nil {
 		return e.SessionID
 	}
-	// Orchestrator (no owning entry in the main repo): re-derive the scope from
-	// the harness's own resumable session ref so a resume re-scopes to the same
-	// registry entries. Falls back to "" (no random mint) for read-only verbs.
+	// Orchestrator (no owning entry in the main repo) with PRA_SESSION stripped
+	// by a sandbox: prefer the on-disk current-session marker written by `start`
+	// (which ran OUTSIDE the sandbox and knew the REAL session id). This keeps
+	// env-less verbs (list/resume/cleanup) scoped to the same entries the daemon
+	// polls, instead of a harness-ref re-derivation that misses the stripped
+	// PRA_HARNESS and yields a different id.
+	if s := core.LoadCurrentSession(cwd); s != "" {
+		return s
+	}
+	// Last resort: re-derive the scope from the harness's own resumable session
+	// ref so a resume re-scopes to the same registry entries. Falls back to ""
+	// (no random mint) for read-only verbs.
 	return core.ResolveScopeID(
 		scopeRefResolver(os.Getenv(core.EnvHarness), cwd),
 		"",

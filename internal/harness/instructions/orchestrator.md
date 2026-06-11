@@ -17,10 +17,13 @@ the PR, and pass the same `--simplify` choice to every `pr-agents dispatch`.
 
 ## Dispatching PRs
 
-Hand each PR-sized chunk of work to its own worker:
+Hand each PR-sized chunk of work to its own worker. ALWAYS dispatch with the
+explicit identity flags below — they carry your session, harness, and launcher
+to the worker across any sandbox boundary (env vars do not survive it):
 
 ```
-pr-agents dispatch --name "<short PR title>" --task "<full self-contained instructions>" \
+pr-agents dispatch --session {{.Session}} --harness {{.Harness}} --launcher "{{.Launcher}}" \
+  --name "<short PR title>" --task "<full self-contained instructions>" \
   [--mode independent|stack|graphite] [--base <branch>] [--stack-on <id|branch>] [--simplify]
 ```
 

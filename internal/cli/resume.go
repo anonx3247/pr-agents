@@ -191,7 +191,16 @@ func runResume(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	session := resolveSession(all, cwd)
-	revived := reviveScope(all, cwd, session, os.Getenv(core.EnvHarness), os.Getenv(core.EnvLauncher), orchestratorPane())
+	// Recover harness+launcher with the same precedence as dispatch (env >
+	// persisted session record) so a resume under a sandbox launcher — where the
+	// PRA_* env vars were stripped — still relaunches dead panes WITH the sandbox
+	// prefix instead of escaping it via the bare default launcher. Each entry's
+	// own PrEntry.Harness still wins per-pane; these are the legacy/launcher
+	// fallbacks.
+	rec := core.SessionRecordFor(cwd, session)
+	orchHarness := core.ResolveFromSources("", os.Getenv(core.EnvHarness), rec.Harness)
+	launcher := core.ResolveFromSources("", os.Getenv(core.EnvLauncher), rec.Launcher)
+	revived := reviveScope(all, cwd, session, orchHarness, launcher, orchestratorPane())
 	fmt.Fprintf(stdout, "pr-agents resume: scope %s, revived %d dead agent(s).\n", session, revived)
 	return 0
 }
