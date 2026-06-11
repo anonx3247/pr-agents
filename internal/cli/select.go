@@ -43,9 +43,9 @@ func runSelect(args []string, stdout, stderr io.Writer) int {
 }
 
 // selectFrom renders the numbered menu for the given live agents, reads one
-// choice from in, and focuses the chosen pane. It is the testable core of the
-// select verb: registry loading and tmux focus are injected by the caller and
-// the package-level focusPane var. Returns a process exit code.
+// choice from in, focuses the chosen pane, and returns a process exit code. It
+// is the testable core of the select verb: the entry list comes from the caller
+// and the tmux focus call goes through the package-level focusPane var.
 func selectFrom(live []core.PrEntry, in io.Reader, stdout, stderr io.Writer) int {
 	if len(live) == 0 {
 		fmt.Fprintln(stdout, "No live PR agents.")
