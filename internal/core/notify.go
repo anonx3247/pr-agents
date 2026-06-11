@@ -67,9 +67,10 @@ func BuildFinishedNotification(entries []PrEntry) string {
 }
 
 // BuildCleanupNotification builds the orchestrator notification for one or more
-// PRs that just reached a terminal state on GitHub, combined into ONE message.
-// Phrased for the CLI world: it tells the orchestrator to run `pr-agents
-// cleanup`. Pure.
+// PRs that just reached a terminal state on GitHub. Multiple transitions in one
+// poll tick are COALESCED into a single message (one line per PR) to reduce
+// noise rather than emitting N separate notifications. Phrased for the CLI
+// world: it tells the orchestrator to run `pr-agents cleanup`. Pure.
 func BuildCleanupNotification(transitions []StateTransition) string {
 	lines := make([]string, 0, len(transitions)+2)
 	for _, t := range transitions {
@@ -80,6 +81,10 @@ func BuildCleanupNotification(transitions []StateTransition) string {
 		lines = append(lines,
 			fmt.Sprintf("PR %s '%s' (branch %s) was %s on GitHub.", pr, t.Entry.PrName, t.Entry.Branch, t.State))
 	}
-	lines = append(lines, "", "Run `pr-agents cleanup` to remove the merged/closed worktrees, branches, and tmux windows.")
+	target := "its worktree, branch, and tmux window"
+	if len(transitions) != 1 {
+		target = "their worktrees, branches, and tmux windows"
+	}
+	lines = append(lines, "", fmt.Sprintf("Run `pr-agents cleanup` to remove %s.", target))
 	return strings.Join(lines, "\n")
 }
