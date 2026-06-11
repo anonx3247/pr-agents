@@ -6,19 +6,29 @@ import "github.com/anonx3247/pr-agents/internal/core"
 // transitions to a terminal state (merged/closed), persists the status to the
 // registry and notifies the orchestrator pane to run cleanup. Entries the worker
 // has not yet pushed make ZERO gh calls.
+//
+// For the graphite strategy the whole stack's PR/merge state is read from
+// Graphite's `.graphite_pr_info` cache in ONE shot; per-PR gh reads remain the
+// fallback whenever gt has no data for a PR (so github/independent strategies,
+// and graphite repos without a gt cache, behave exactly as before).
 func (d *Daemon) pollPrState() {
+	gtStates := d.graphiteStates()
 	classified := make([]core.ClassifiedEntry, 0)
 	for _, e := range d.entries() {
 		if !core.IsPollable(e) {
 			continue
 		}
-		j, ok := d.gh.PrState(e.Worktree, *e.PrNumber)
-		if !ok {
-			continue
+		state := gtStates[*e.PrNumber]
+		if state == "" || state == core.PrStateUnknown {
+			// No gt data for this PR — fall back to the per-entry gh read.
+			j, ok := d.gh.PrState(e.Worktree, *e.PrNumber)
+			if !ok {
+				continue
+			}
+			state = core.ClassifyPrState(j)
 		}
-		state := core.ClassifyPrState(j)
 		if state == core.PrStateUnknown {
-			continue // gh missing/unauth/error — degrade silently
+			continue // gh/gt missing/unauth/error — degrade silently
 		}
 		classified = append(classified, core.ClassifiedEntry{Entry: e, State: state})
 	}
@@ -39,6 +49,26 @@ func (d *Daemon) pollPrState() {
 	if len(transitions) > 0 && d.cfg.OrchestratorPane != "" {
 		d.tm.SendToPane(d.cfg.OrchestratorPane, core.BuildCleanupNotification(transitions))
 	}
+}
+
+// graphiteStates returns a prNumber→PrStateClass map read from Graphite's
+// `.graphite_pr_info` cache in one shot, but only for the graphite strategy.
+// For every other strategy (or when gt/graphite has no data) it returns nil, so
+// callers transparently fall back to per-PR gh reads. Classification is done
+// here via the pure core helper.
+func (d *Daemon) graphiteStates() map[int]core.PrStateClass {
+	if d.cfg.Strategy != core.StrategyGraphite {
+		return nil
+	}
+	infos := d.gh.GraphitePrStates(d.cwd)
+	if len(infos) == 0 {
+		return nil
+	}
+	states := make(map[int]core.PrStateClass, len(infos))
+	for _, i := range infos {
+		states[i.PrNumber] = core.ClassifyGraphitePrState(i.State)
+	}
+	return states
 }
 
 // pollFinished notifies the orchestrator when a worker's reported result

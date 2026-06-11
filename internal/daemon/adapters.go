@@ -203,6 +203,13 @@ func (realGH) ReviewActivity(owner, repo string, number int, cwd string) (core.F
 	return act, any
 }
 
+// GraphitePrStates refreshes (best-effort `gt log short`) then reads the whole
+// stack's PR/merge state from Graphite's `.graphite_pr_info` cache. It degrades
+// to nil when gt is missing/unauthenticated or the cache is absent/unreadable.
+func (realGH) GraphitePrStates(cwd string) []core.GraphitePrInfo {
+	return core.FetchGraphitePrStates(cwd)
+}
+
 func (realGH) OwnerRepo(cwd string) (string, string, bool) {
 	out, ok := runGh(cwd, "repo", "view", "--json", "nameWithOwner")
 	if !ok {
