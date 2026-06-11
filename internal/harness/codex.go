@@ -17,6 +17,14 @@ package harness
 //     (equivalent to --sandbox workspace-write --ask-for-approval on-failure);
 //   - Codex reads AGENTS.md from its working root automatically, which is how
 //     the file-injected instructions reach it (no argv flag needed).
+//
+// Operator options propagate to subagents: --full-auto here is only the DEFAULT
+// autonomy level. Any harness flags the operator passes to the main agent via
+// `pr-agents start -- <args>` (e.g. a stronger
+// --dangerously-bypass-approvals-and-sandbox "YOLO" mode, or a model choice)
+// are carried in PRA_HARNESS_ARGS and replayed by dispatch onto every worker's
+// argv after BuildArgs — so subagents run with the same options as the main
+// agent rather than just this fixed default.
 type codexAdapter struct{}
 
 func init() { register(codexAdapter{}) }

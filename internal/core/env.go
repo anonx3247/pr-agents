@@ -5,6 +5,7 @@
 package core
 
 import (
+	"encoding/json"
 	"os"
 	"strconv"
 )
@@ -40,7 +41,41 @@ const (
 	// task + flags (e.g. "pi", or a sandbox wrapper like "isara codex run").
 	// pr-agents appends the adapter's BuildArgs transparently after it.
 	EnvLauncher = "PRA_LAUNCHER"
+	// EnvHarnessArgs carries the operator's harness passthrough flags — the args
+	// after `--` on `pr-agents start` (e.g. a YOLO/--full-auto override, a model
+	// choice) — JSON-encoded so they survive intact across processes. dispatch
+	// replays them onto every worker pane so subagents run with the same harness
+	// options the operator chose for the main agent.
+	EnvHarnessArgs = "PRA_HARNESS_ARGS"
 )
+
+// EncodeHarnessArgs serializes the operator's harness passthrough args to a
+// compact JSON string for transport via EnvHarnessArgs. Empty/nil encodes to ""
+// so an unset env var and "no extra args" are indistinguishable. Pure.
+func EncodeHarnessArgs(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(args)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// DecodeHarnessArgs is the inverse of EncodeHarnessArgs: it parses the JSON
+// string back into a slice. Empty or malformed input yields nil so callers can
+// append the result unconditionally. Pure.
+func DecodeHarnessArgs(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var args []string
+	if err := json.Unmarshal([]byte(raw), &args); err != nil {
+		return nil
+	}
+	return args
+}
 
 // Depth reads PRA_DEPTH from the environment and returns it as an int, falling
 // back to 0 when it is unset or not a valid integer.

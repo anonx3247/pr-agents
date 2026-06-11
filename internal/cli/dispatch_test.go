@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/anonx3247/pr-agents/internal/core"
+	"github.com/anonx3247/pr-agents/internal/harness"
 )
 
 func TestPlanDispatch(t *testing.T) {
@@ -201,6 +202,23 @@ func TestGenIDShape(t *testing.T) {
 	}
 	if id != strings.ToLower(id) {
 		t.Errorf("genID = %q, want lowercase hex", id)
+	}
+}
+
+func TestHarnessArgsReplayedAfterBuildArgs(t *testing.T) {
+	// Operator passthrough args (from `start -- <args>`) are appended AFTER the
+	// adapter's own argv so a worker runs with the same harness options as the
+	// main agent. Mirrors the composition in runDispatch.
+	a, err := harness.Get("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	harnessArgs := core.DecodeHarnessArgs(core.EncodeHarnessArgs([]string{"--model", "o3"}))
+	args := append(a.BuildArgs(harness.LaunchSpec{Task: "do it"}, ""), harnessArgs...)
+	got := buildLaunchCommand("codex", args, "bash")
+	want := "codex 'do it' '--full-auto' '--model' 'o3'; exec bash"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
