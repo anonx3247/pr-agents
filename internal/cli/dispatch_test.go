@@ -298,3 +298,15 @@ func TestResolveHarnessLauncher(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDispatchSession(t *testing.T) {
+	// Explicit --session wins even when the cwd fallback would derive a wrong id
+	// from a stripped env (the sandbox case).
+	if got := resolveDispatchSession("S_real", func() string { return "S_pi" }); got != "S_real" {
+		t.Errorf("flag should win: got %q want S_real", got)
+	}
+	// With no flag, fall back to the cwd-derived id.
+	if got := resolveDispatchSession("", func() string { return "S_fallback" }); got != "S_fallback" {
+		t.Errorf("empty flag should use fallback: got %q want S_fallback", got)
+	}
+}

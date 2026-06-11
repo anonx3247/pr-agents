@@ -151,6 +151,19 @@ func dispatchPaneEnv(session, harnessKind, launcher string) map[string]string {
 	}
 }
 
+// resolveDispatchSession picks the session id that owns a dispatched entry: the
+// explicit --session flag (injected into the orchestrator instructions by
+// `start`, which carries it across the sandbox boundary via argv/text) when set,
+// else the cwd-derived fallback (PRA_SESSION env > owning entry > current-session
+// marker > harness ref). The flag is primary so a stripped env never misfiles an
+// entry under a wrong, harness-ref-derived id. Pure given fallback.
+func resolveDispatchSession(flagSession string, fallback func() string) string {
+	if flagSession != "" {
+		return flagSession
+	}
+	return fallback()
+}
+
 // resolveHarnessLauncher applies the dispatch precedence — explicit flag > env >
 // persisted session record > final fallback — to the harness kind and launcher
 // prefix, returning the chosen adapter. The harness falls back to "pi" and the
@@ -262,10 +275,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// sandbox launcher has stripped the env vars before the orchestrator shelled
 	// out to dispatch — otherwise a claude/codex fleet would silently spawn pi
 	// workers AND escape the sandbox via the bare default launcher.
-	session := o.session
-	if session == "" {
-		session = resolveSession(all, cwd)
-	}
+	session := resolveDispatchSession(o.session, func() string { return resolveSession(all, cwd) })
 	rec := core.SessionRecordFor(cwd, session)
 	var adapter harness.Adapter
 	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(
