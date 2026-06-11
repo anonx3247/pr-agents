@@ -22,6 +22,15 @@ type InstructionData struct {
 	Branch string
 	// Mode is the stacking mode: independent | stack | graphite | helper.
 	Mode string
+	// Session, Harness, and Launcher carry the orchestrator's OWN resolved
+	// identity into the orchestrator instructions so it dispatches with explicit
+	// `--session/--harness/--launcher` flags. `start` resolves these OUTSIDE the
+	// sandbox (where the real values are known) and injects them via argv/AGENTS,
+	// which DO cross the sandbox boundary — unlike the PRA_* env vars. Only the
+	// orchestrator template uses them.
+	Session  string
+	Harness  string
+	Launcher string
 }
 
 // templateFor maps a role to its embedded template file name.

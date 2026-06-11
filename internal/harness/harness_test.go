@@ -253,6 +253,24 @@ func TestInstructionsWorkerInterpolation(t *testing.T) {
 	}
 }
 
+func TestInstructionsOrchestratorIdentity(t *testing.T) {
+	out, err := Instructions(RoleOrchestrator, InstructionData{
+		Session:  "S_real",
+		Harness:  "claude",
+		Launcher: "isara claude run",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "{{") {
+		t.Errorf("template not fully rendered: %q", out)
+	}
+	want := `pr-agents dispatch --session S_real --harness claude --launcher "isara claude run"`
+	if !strings.Contains(out, want) {
+		t.Errorf("orchestrator instructions missing templated dispatch command %q\n--- got ---\n%s", want, out)
+	}
+}
+
 func TestInstructionsUnknownRole(t *testing.T) {
 	if _, err := Instructions(Role("bogus"), InstructionData{}); err == nil {
 		t.Error("expected error for unknown role")

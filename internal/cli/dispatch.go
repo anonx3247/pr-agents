@@ -27,6 +27,7 @@ type dispatchOpts struct {
 	simplify bool
 	harness  string
 	launcher string
+	session  string
 }
 
 // dispatchPlan is the resolved branch/base/mode for a dispatch, computed purely
@@ -214,6 +215,11 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// has stripped the PRA_* env vars.
 	fs.StringVar(&o.harness, "harness", "", "Harness adapter: pi|claude|codex")
 	fs.StringVar(&o.launcher, "launcher", "", "Launch-command prefix before the harness args")
+	// --session carries the orchestrator's REAL session id across the sandbox
+	// boundary (env is stripped). The orchestrator instructions templated by
+	// `start` always pass it; precedence is --session flag > PRA_SESSION env >
+	// cwd-derived fallback.
+	fs.StringVar(&o.session, "session", "", "Orchestrator session id that owns this entry")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -256,7 +262,10 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// sandbox launcher has stripped the env vars before the orchestrator shelled
 	// out to dispatch — otherwise a claude/codex fleet would silently spawn pi
 	// workers AND escape the sandbox via the bare default launcher.
-	session := resolveSession(all, cwd)
+	session := o.session
+	if session == "" {
+		session = resolveSession(all, cwd)
+	}
 	rec := core.SessionRecordFor(cwd, session)
 	var adapter harness.Adapter
 	o.harness, o.launcher, adapter, err = resolveHarnessLauncher(

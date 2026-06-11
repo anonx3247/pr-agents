@@ -191,7 +191,15 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 		return 1
 	}
 
-	instructions, err := harness.Instructions(harness.RoleOrchestrator, harness.InstructionData{})
+	// Inject the orchestrator's OWN resolved identity (session/harness/launcher)
+	// into its instructions so it dispatches with explicit flags. This process
+	// runs OUTSIDE the sandbox and knows the REAL values; the rendered text/argv
+	// crosses the sandbox boundary (env vars do not).
+	instructions, err := harness.Instructions(harness.RoleOrchestrator, harness.InstructionData{
+		Session:  session,
+		Harness:  harnessKind,
+		Launcher: launcher,
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "pr-agents start: %v\n", err)
 		return 1
@@ -218,6 +226,10 @@ func startInsideTmux(stdout, stderr io.Writer, adapter harness.Adapter, session,
 	// orchestrator shells out to dispatch; the on-disk record (which crosses the
 	// sandbox boundary via the mounted repo) is the durable fallback. Best-effort.
 	_ = core.SaveSessionRecord(cwd, session, core.SessionRecord{Harness: harnessKind, Launcher: launcher})
+	// And a cwd-discoverable marker of the REAL session id so env-less verbs
+	// (list/resume/cleanup) the sandboxed orchestrator runs resolve this exact
+	// scope rather than a harness-ref re-derivation that misses stripped env.
+	_ = core.SaveCurrentSession(cwd, session)
 
 	// Carry the PRA_* contract to the orchestrator process so dispatch reads it.
 	os.Setenv(core.EnvSession, session)
