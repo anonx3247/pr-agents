@@ -1,7 +1,7 @@
 # Running pr-agents under a sandbox
 
-pr-agents is **sandbox-agnostic by design**. It never invokes `asb`, `sx`,
-`isara`, or any other OS-level sandbox itself. Instead, the command used to spawn
+pr-agents is **sandbox-agnostic by design**. It never invokes `asb`, `sx`, or
+any other OS-level sandbox itself. Instead, the command used to spawn
 each harness process is a configurable PREFIX — the **launcher** — and a sandbox
 is layered on by overriding ONLY that prefix. Everything else (worktree
 creation, the registry, tmux panes, the daemon) is unchanged whether or not a
@@ -30,8 +30,8 @@ through it instead:
 # bare (default): pi <task> -a --append-system-prompt <instructions> ...
 pr-agents start --harness pi
 
-# sandboxed: isara pi run -- <task> -a --append-system-prompt <instructions> ...
-pr-agents start --harness pi --launcher "isara pi run --"
+# sandboxed: asb --profile git -- pi <task> -a --append-system-prompt <instructions> ...
+pr-agents start --harness pi --launcher "asb --profile git -- pi"
 ```
 
 You configure the launcher in one of two equivalent ways:
@@ -43,7 +43,7 @@ You configure the launcher in one of two equivalent ways:
 
 ```bash
 export PRA_HARNESS=claude
-export PRA_LAUNCHER="isara claude run --"
+export PRA_LAUNCHER="asb --profile git -- claude"
 pr-agents start
 ```
 
@@ -122,25 +122,25 @@ harness's OWN in-pane approval prompts / in-process sandbox inside an already
 isolated worktree. The real isolation is the launcher's OS-level sandbox, not the
 harness's approval flow — which is why bypassing the latter is safe here.
 
-## Example: claude under isara
+## Example: claude under asb
 
 ```bash
-pr-agents start --harness claude --launcher "isara claude run --"
+pr-agents start --harness claude --launcher "asb --profile git -- claude"
 ```
 
 This expands per spawn to:
 
 ```
-isara claude run -- <task> --append-system-prompt <instructions> --dangerously-skip-permissions
+asb --profile git -- claude <task> --append-system-prompt <instructions> --dangerously-skip-permissions
 ```
 
 A small wrapper script is often cleaner than an inline prefix, and lets you pin
 flags/profiles in one place. See
-[`examples/launchers/isara-claude.sh`](../examples/launchers/isara-claude.sh):
+[`examples/launchers/asb-claude.sh`](../examples/launchers/asb-claude.sh):
 
 ```bash
 pr-agents start --harness claude \
-  --launcher "$(pwd)/examples/launchers/isara-claude.sh"
+  --launcher "$(pwd)/examples/launchers/asb-claude.sh"
 ```
 
 ## Example: codex under asb

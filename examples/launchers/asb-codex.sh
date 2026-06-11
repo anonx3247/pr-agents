@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Example launcher: run the codex harness under the agent-sandbox (asb).
 #
-# Same model as examples/launchers/isara-claude.sh: pr-agents only ever sees a
+# Same model as examples/launchers/asb-claude.sh: pr-agents only ever sees a
 # launcher PREFIX and appends the harness args after it. Override the prefix to
 # slot a sandbox in; pr-agents itself never invokes asb.
 #

@@ -151,7 +151,8 @@ verb at the top level prints a hint pointing at its `pr-agents tool …` form.
 pr-agents never invokes a sandbox itself. It is sandbox-agnostic: the command
 used to spawn each harness is a configurable PREFIX (the **launcher**), and a
 sandbox is layered on by overriding ONLY that prefix — e.g.
-`--launcher "isara claude run --"` or `--launcher "asb --profile git -- codex"`.
+`--launcher "asb --profile git -- claude"` or
+`--launcher "asb --profile git -- codex"`.
 Every orchestrator and worker pane is re-launched through the same prefix, so a
 fresh sandbox is re-imposed per pane rather than inherited. Because sandboxes
 filter environment variables across the launch boundary, workers resolve their
