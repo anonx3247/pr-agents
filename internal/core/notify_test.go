@@ -53,9 +53,24 @@ func TestBuildCleanupNotification(t *testing.T) {
 	msg := BuildCleanupNotification([]StateTransition{
 		{Entry: PrEntry{PrName: "feat", Branch: "br", PrNumber: intp(9)}, State: PrStateMerged},
 	})
-	for _, want := range []string{"PR #9", "was merged on GitHub", "pr-agents cleanup"} {
+	for _, want := range []string{"PR #9", "was merged on GitHub", "pr-agents cleanup", "its worktree, branch, and tmux window"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("cleanup notice missing %q:\n%s", want, msg)
 		}
+	}
+
+	// Multiple same-tick transitions COALESCE into ONE message, one line per PR,
+	// with pluralized cleanup phrasing.
+	multi := BuildCleanupNotification([]StateTransition{
+		{Entry: PrEntry{PrName: "a", Branch: "b1", PrNumber: intp(1)}, State: PrStateMerged},
+		{Entry: PrEntry{PrName: "c", Branch: "b2", PrNumber: intp(2)}, State: PrStateClosed},
+	})
+	for _, want := range []string{"PR #1", "was merged", "PR #2", "was closed", "their worktrees, branches, and tmux windows"} {
+		if !strings.Contains(multi, want) {
+			t.Errorf("coalesced notice missing %q:\n%s", want, multi)
+		}
+	}
+	if strings.Count(multi, "pr-agents cleanup") != 1 {
+		t.Errorf("want exactly one cleanup instruction (coalesced):\n%s", multi)
 	}
 }

@@ -44,6 +44,11 @@ type Config struct {
 	GhInterval     time.Duration
 	ReviewInterval time.Duration
 	NoDock         bool
+	// Strategy is the project's default stacking strategy. When it is
+	// StrategyGraphite, the gh-state poller reads the whole stack's PR/merge
+	// state from Graphite's `.graphite_pr_info` cache in one shot, falling back to
+	// per-PR gh reads when gt/graphite is absent.
+	Strategy core.StackStrategy
 }
 
 // GH abstracts the gh/git reads the daemon performs, so the tick logic can be
@@ -58,6 +63,11 @@ type GH interface {
 	ReviewActivity(owner, repo string, number int, cwd string) (core.FetchedReviewActivity, bool)
 	// OwnerRepo resolves the current repo's owner/name in cwd.
 	OwnerRepo(cwd string) (owner, repo string, ok bool)
+	// GraphitePrStates refreshes and reads the whole Graphite stack's PR/merge
+	// state from `.graphite_pr_info` in ONE shot (used only for the graphite
+	// strategy). It returns nil when gt/graphite is absent or the cache is
+	// unreadable, so callers degrade to per-PR gh reads.
+	GraphitePrStates(cwd string) []core.GraphitePrInfo
 }
 
 // Tmuxer abstracts the tmux operations the daemon performs (messaging + dock

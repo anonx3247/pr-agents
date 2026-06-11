@@ -44,6 +44,11 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// Best-effort: the project's stacking strategy decides whether the gh-state
+	// poller reads the whole stack from Graphite in one shot. A missing/unreadable
+	// config leaves it empty (the github/independent path).
+	projCfg, _ := core.LoadProjectConfig(cwd)
+
 	cfg := daemon.Config{
 		Session:          *session,
 		OrchestratorPane: *orchPane,
@@ -51,6 +56,7 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		GhInterval:       *ghInterval,
 		ReviewInterval:   *reviewInterval,
 		NoDock:           *noDock,
+		Strategy:         projCfg.Strategy,
 	}
 	d := daemon.NewReal(cfg, cwd)
 

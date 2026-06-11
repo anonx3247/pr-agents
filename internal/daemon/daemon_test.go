@@ -19,15 +19,19 @@ type fakeCi struct {
 }
 
 type fakeGH struct {
-	state  map[int]*core.PrStateJSON
-	ci     map[int]fakeCi
-	review map[int]core.FetchedReviewActivity
-	owner  string
-	repo   string
-	hasOwn bool
+	state    map[int]*core.PrStateJSON
+	ci       map[int]fakeCi
+	review   map[int]core.FetchedReviewActivity
+	owner    string
+	repo     string
+	hasOwn   bool
+	graphite []core.GraphitePrInfo
+	gtCalls  int
+	prCalls  int
 }
 
 func (f *fakeGH) PrState(_ string, n int) (*core.PrStateJSON, bool) {
+	f.prCalls++
 	j, ok := f.state[n]
 	return j, ok
 }
@@ -44,6 +48,10 @@ func (f *fakeGH) ReviewActivity(_, _ string, n int, _ string) (core.FetchedRevie
 }
 func (f *fakeGH) OwnerRepo(_ string) (string, string, bool) {
 	return f.owner, f.repo, f.hasOwn
+}
+func (f *fakeGH) GraphitePrStates(_ string) []core.GraphitePrInfo {
+	f.gtCalls++
+	return f.graphite
 }
 
 type sent struct {
@@ -156,6 +164,66 @@ func TestPollPrStateSkipsUnpushed(t *testing.T) {
 	d.pollPrState()
 	if len(tm.sends) != 0 {
 		t.Errorf("unpushed entry should not be polled, got %#v", tm.sends)
+	}
+}
+
+func TestPollPrStateGraphiteReadsStackInOneShot(t *testing.T) {
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1), worker("b", 2)}}
+	gh := &fakeGH{graphite: []core.GraphitePrInfo{
+		{PrNumber: 1, State: "MERGED"},
+		{PrNumber: 2, State: "OPEN"},
+	}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch", Strategy: core.StrategyGraphite}, gh, tm, st)
+
+	d.pollPrState()
+
+	// One gt read for the whole stack; NO per-PR gh fallback (gt covered both).
+	if gh.gtCalls != 1 {
+		t.Errorf("want 1 graphite read, got %d", gh.gtCalls)
+	}
+	if gh.prCalls != 0 {
+		t.Errorf("want no per-PR gh fallback, got %d", gh.prCalls)
+	}
+	msgs := tm.messagesTo("orch")
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "PR #1") || !strings.Contains(msgs[0], "merged") {
+		t.Fatalf("want one merged notice for PR #1, got %#v", msgs)
+	}
+	if st.entries[0].Status != core.StatusMerged {
+		t.Errorf("entry a status = %q, want merged", st.entries[0].Status)
+	}
+}
+
+func TestPollPrStateGraphiteFallsBackToGh(t *testing.T) {
+	// gt has data only for PR 1; PR 2 falls back to the per-PR gh read.
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1), worker("b", 2)}}
+	gh := &fakeGH{
+		graphite: []core.GraphitePrInfo{{PrNumber: 1, State: "OPEN"}},
+		state:    map[int]*core.PrStateJSON{2: {State: "MERGED"}},
+	}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch", Strategy: core.StrategyGraphite}, gh, tm, st)
+
+	d.pollPrState()
+
+	if gh.prCalls != 1 {
+		t.Errorf("want exactly one gh fallback (PR 2), got %d", gh.prCalls)
+	}
+	msgs := tm.messagesTo("orch")
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "PR #2") {
+		t.Fatalf("want merged notice for PR #2 via gh fallback, got %#v", msgs)
+	}
+}
+
+func TestPollPrStateNonGraphiteSkipsGraphiteRead(t *testing.T) {
+	st := &fakeStore{entries: []core.PrEntry{worker("a", 1)}}
+	gh := &fakeGH{state: map[int]*core.PrStateJSON{1: {State: "OPEN"}}}
+	tm := &fakeTmux{alive: map[string]bool{"orch": true}}
+	d := newDaemon(Config{OrchestratorPane: "orch"}, gh, tm, st) // default (github) strategy
+
+	d.pollPrState()
+	if gh.gtCalls != 0 {
+		t.Errorf("non-graphite strategy must not read graphite, got %d calls", gh.gtCalls)
 	}
 }
 
