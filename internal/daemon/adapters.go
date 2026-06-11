@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anonx3247/pr-agents/internal/core"
+	"github.com/anonx3247/pr-agents/internal/harness"
 	"github.com/anonx3247/pr-agents/internal/tmux"
 )
 
@@ -249,6 +250,18 @@ func PostReviewReply(owner, repo string, prNumber, commentID int, body, cwd stri
 		return 0, false
 	}
 	return j.ID, true
+}
+
+// realSessionResolver resolves a worker's resumable session ref via the harness
+// adapter registry. An unknown harness kind or a SessionRef miss both degrade to
+// ok=false, so the daemon simply retries on a later tick. It is the production
+// SessionResolver wired into every real Daemon.
+func realSessionResolver(kind, cwd string, since time.Time) (string, bool) {
+	a, err := harness.Get(kind)
+	if err != nil {
+		return "", false
+	}
+	return a.SessionRef(cwd, since)
 }
 
 // realTmux implements Tmuxer over the tmux package.

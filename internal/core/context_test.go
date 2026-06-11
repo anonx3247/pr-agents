@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func ptr(n int) *int { return &n }
 
@@ -123,6 +126,24 @@ func TestPickWorkingAgent(t *testing.T) {
 	noneWorking := func(PrEntry) bool { return false }
 	if got := PickWorkingAgent(entries, alive, noneWorking, noActivity); got != nil {
 		t.Errorf("none working: got %v, want nil", got)
+	}
+}
+
+func TestSelectSessionCaptureTargets(t *testing.T) {
+	alive := func(id string) bool { return id != "%dead" }
+	entries := []PrEntry{
+		{ID: "eligible", Depth: 1, PaneID: "%1"},
+		{ID: "hasref", Depth: 1, PaneID: "%2", WorkerSessionRef: "already"}, // skip: captured
+		{ID: "dead", Depth: 1, PaneID: "%dead"},                             // skip: dead pane
+		{ID: "helper", Depth: 2, PaneID: "%3"},                              // skip: depth-2
+		{ID: "nopane", Depth: 1, PaneID: ""},                                // skip: no pane
+	}
+	got := SelectSessionCaptureTargets(entries, alive)
+	if ids := idsOf(got); !reflect.DeepEqual(ids, []string{"eligible"}) {
+		t.Errorf("capture targets = %v, want [eligible]", ids)
+	}
+	if got := SelectSessionCaptureTargets(nil, alive); len(got) != 0 {
+		t.Errorf("empty: got %v, want none", got)
 	}
 }
 
