@@ -7,15 +7,10 @@
 # every dispatched worker pane is then launched through this same wrapper, so a
 # fresh sandbox is re-imposed per pane.
 #
-# Wire it in either way:
+# Wire it in:
 #
 #   pr-agents start --harness claude \
 #     --launcher "$(pwd)/examples/launchers/isara-claude.sh"
-#
-#   # or, equivalently, export the orchestrator-side default once:
-#   export PRA_HARNESS=claude
-#   export PRA_LAUNCHER="$(pwd)/examples/launchers/isara-claude.sh"
-#   pr-agents start
 #
 # pr-agents appends the claude adapter's BuildArgs after this command, e.g.:
 #
